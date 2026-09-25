@@ -5,6 +5,7 @@ export const DROP_ADDRESS = "0x897d36a3d028776c3cdfc2e5a468544fdd1eb9d3" as cons
 export const DROP_CHAIN_ID = 11155111 as const;
 export const DROP_ID = "0x64f7af12f57ad832dea3222b17888594a0a2418acf672efe4526d73da512aa49" as const;
 export const DROP_VERIFIER = "0xe8099d0E4e16be5901723025F711631526d2ff05" as const;
+export const DROP_DEPLOY_BLOCK = 11779276n;
 
 export const dropAbi = [
   {

@@ -15,5 +15,6 @@
   "steepSlopeWei": "500000000000000",
   "spreadBps": 500,
   "saleEnd": 1790599176,
-  "saleEndISO": "2026-09-28T12:39:36Z"
+  "saleEndISO": "2026-09-28T12:39:36Z",
+  "deployBlock": 11779276
 }
