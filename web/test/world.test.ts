@@ -93,6 +93,15 @@ test("valid proof: returns World's nullifier and calls our RP with only World's 
   ]);
 });
 
+test("falls back to the per-result nullifier when World omits the top-level one", async () => {
+  worldReplies(200, {
+    success: true,
+    environment: process.env.WORLD_ENVIRONMENT,
+    results: [{ identifier: "proof_of_human", success: true, nullifier: "0x07" }],
+  });
+  assert.equal(await verifyProof(proofFor(BUYER), BUYER), 7n);
+});
+
 test("trusts World's environment over the client's claim", async () => {
   worldReplies(200, {
     success: true,

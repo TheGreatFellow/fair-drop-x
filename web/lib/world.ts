@@ -66,7 +66,7 @@ export type IDKitResult = {
   environment?: string;
   responses?: ProofResponse[];
 };
-type VerifyResult = { identifier?: string; success?: boolean };
+type VerifyResult = { identifier?: string; success?: boolean; nullifier?: string };
 
 /**
  * Verifies a World ID proof server-side and returns the buyer's nullifier. Throws a Rejection.
@@ -128,8 +128,10 @@ export async function verifyProof(result: IDKitResult, buyer: Address): Promise<
     throw new Rejection(400, "wrong_environment", `World verified a ${data.environment} proof, expected ${environment}`);
   }
   const results: VerifyResult[] = data.results ?? [];
-  if (!results.some((r) => r.identifier === credential && r.success)) {
+  const match = results.find((r) => r.identifier === credential && r.success);
+  if (!match) {
     throw new Rejection(400, "wrong_credential", `Requires the ${credential} credential`);
   }
-  return parseNullifier(data.nullifier);
+  // World puts the nullifier at the top level; some responses only carry it per result.
+  return parseNullifier(data.nullifier ?? match.nullifier);
 }
