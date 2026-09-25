@@ -22,7 +22,9 @@ import {SwapParams, ModifyLiquidityParams} from "@uniswap/v4-core/src/types/Pool
 /// in `hookData`. The pool pairs ETH with this contract itself: its "other side" is the drop's units.
 ///
 /// Flow: bid (swap) → maker closes bidding → reveal → maker settles (fan raffle at 定価 first, then
-/// the rest to the highest bids at one price: the highest losing bid) → claim → sell back.
+/// the rest to the highest bids at one price: the highest losing bid) → claim; maker withdraws.
+/// No sell-back (unlike Drop.sol): winners paid the market price, so there is no resale edge to
+/// compete with, and a returned unit could never be resold in a single-round auction.
 contract AuctionDrop is BaseAsyncSwap, ERC721, EIP712, IUnlockCallback {
     using CurrencySettler for Currency;
 
@@ -33,9 +35,7 @@ contract AuctionDrop is BaseAsyncSwap, ERC721, EIP712, IUnlockCallback {
         uint256 supply; // N
         uint256 fanUnits; // X, raffled at the reserve price
         uint256 reservePrice; // 定価
-        uint256 spreadBps; // sell-back spread
         uint256 minRevealTime; // seconds the reveal phase stays open before the maker may settle
-        uint256 saleEnd; // sell-back closes; maker can then withdraw everything
     }
 
     // Same voucher as Drop.sol, so the Phase 1 backend signs for both.
@@ -69,7 +69,6 @@ contract AuctionDrop is BaseAsyncSwap, ERC721, EIP712, IUnlockCallback {
 
     bytes32 public constant VOUCHER_TYPEHASH =
         keccak256("Voucher(bytes32 dropId,address buyer,uint256 nullifierHash,uint256 deadline)");
-    uint256 private constant BPS = 10_000;
     Currency private constant ETH = CurrencyLibrary.ADDRESS_ZERO;
 
     address public immutable maker;
@@ -78,9 +77,7 @@ contract AuctionDrop is BaseAsyncSwap, ERC721, EIP712, IUnlockCallback {
     uint256 public immutable supply;
     uint256 public immutable fanUnits;
     uint256 public immutable reservePrice;
-    uint256 public immutable spreadBps;
     uint256 public immutable minRevealTime;
-    uint256 public immutable saleEnd;
 
     Phase public phase;
     bool public poolInitialized;
@@ -92,10 +89,9 @@ contract AuctionDrop is BaseAsyncSwap, ERC721, EIP712, IUnlockCallback {
     address[] public bidders;
     mapping(address => Bid) public bids;
     mapping(uint256 => bool) public nullifierUsed;
-    mapping(uint256 => uint256) public paidFor; // tokenId => price its winner paid
+    mapping(uint256 => uint256) public paidFor; // tokenId => price its winner paid (fulfilment)
 
-    uint256 public makerFunds; // owed to the maker (sale proceeds + forfeits − sell-back payouts)
-    uint256 public liability; // cost of buying back every unit won, while sell-back is open
+    uint256 public makerFunds; // owed to the maker: sale proceeds + forfeited deposits
     uint256 private nextTokenId;
 
     event BidPlaced(address indexed bidder, uint256 nullifierHash, uint256 deposit);
@@ -103,7 +99,6 @@ contract AuctionDrop is BaseAsyncSwap, ERC721, EIP712, IUnlockCallback {
     event BidRevealed(address indexed bidder, uint256 amount);
     event Settled(uint256 clearingPrice, uint256 fanWinners, uint256 auctionWinners);
     event Claimed(address indexed bidder, Outcome outcome, uint256 tokenId, uint256 refund);
-    event SoldBack(address indexed seller, uint256 indexed tokenId, uint256 payout);
     event Withdrawn(uint256 amount);
 
     error BadConfig();
@@ -124,8 +119,6 @@ contract AuctionDrop is BaseAsyncSwap, ERC721, EIP712, IUnlockCallback {
     error BadReveal();
     error RevealTooShort();
     error NothingToClaim();
-    error SaleClosed();
-    error NotOwner();
 
     modifier onlyMaker() {
         if (msg.sender != maker) revert NotMaker();
@@ -142,16 +135,14 @@ contract AuctionDrop is BaseAsyncSwap, ERC721, EIP712, IUnlockCallback {
         ERC721("Fair Drop Auction", "FAIRA")
         EIP712("Drop", "1")
     {
-        if (c.fanUnits > c.supply || c.supply == 0 || c.spreadBps == 0 || c.spreadBps >= BPS) revert BadConfig();
+        if (c.fanUnits > c.supply || c.supply == 0) revert BadConfig();
         maker = c.maker;
         verifier = c.verifier;
         dropId = c.dropId;
         supply = c.supply;
         fanUnits = c.fanUnits;
         reservePrice = c.reservePrice;
-        spreadBps = c.spreadBps;
         minRevealTime = c.minRevealTime;
-        saleEnd = c.saleEnd;
     }
 
     // ───────────────────────────── Uniswap v4 hook ─────────────────────────────
@@ -286,7 +277,6 @@ contract AuctionDrop is BaseAsyncSwap, ERC721, EIP712, IUnlockCallback {
         fanWinners = fans;
         auctionWinners = winners;
         makerFunds = fans * reservePrice + winners * price + forfeits;
-        liability = fans * _payout(reservePrice) + winners * _payout(price);
         emit Settled(price, fans, winners);
     }
 
@@ -309,29 +299,13 @@ contract AuctionDrop is BaseAsyncSwap, ERC721, EIP712, IUnlockCallback {
         _pay(msg.sender, refund);
     }
 
-    /// Return a unit for what its winner paid, minus the spread. Fan units pay back 定価 (their
-    /// price), so the maker always holds enough: every payout is below what that unit brought in.
-    function sellBack(uint256 tokenId) external {
-        if (phase != Phase.Settled || block.timestamp >= saleEnd) revert SaleClosed();
-        if (ownerOf(tokenId) != msg.sender) revert NotOwner();
-        uint256 payout = _payout(paidFor[tokenId]);
-        _burn(tokenId);
-        liability -= payout;
-        makerFunds -= payout;
-        emit SoldBack(msg.sender, tokenId, payout);
-        _pay(msg.sender, payout);
-    }
-
-    /// While sell-back is open the maker can only take what sits above the buy-back liability.
+    /// Everything the sale raised is the maker's as soon as it settles: refunds are owed from the
+    /// bidders' own deposits, never from proceeds.
     function withdraw() external onlyMaker {
-        uint256 amount = withdrawable();
-        makerFunds -= amount;
+        uint256 amount = makerFunds;
+        makerFunds = 0;
         emit Withdrawn(amount);
         _pay(maker, amount);
-    }
-
-    function withdrawable() public view returns (uint256) {
-        return block.timestamp < saleEnd ? makerFunds - liability : makerFunds;
     }
 
     function biddersCount() external view returns (uint256) {
@@ -348,10 +322,6 @@ contract AuctionDrop is BaseAsyncSwap, ERC721, EIP712, IUnlockCallback {
         uint256 amountA = bids[bidders[a]].amount;
         uint256 amountB = bids[bidders[b]].amount;
         return amountA > amountB || (amountA == amountB && a < b);
-    }
-
-    function _payout(uint256 price) private view returns (uint256) {
-        return price * (BPS - spreadBps) / BPS; // rounds down, in the contract's favour
     }
 
     /// Deposits sit in the PoolManager as this hook's ERC-6909 claims; paying out burns claims and

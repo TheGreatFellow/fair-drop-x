@@ -17,7 +17,6 @@ contract AuctionDropTest is Deployers { // Deployers brings v4-core's own forge-
             | Hooks.BEFORE_SWAP_RETURNS_DELTA_FLAG
     );
     uint256 constant RESERVE = 1 ether;
-    uint256 constant SPREAD = 500;
     uint256 constant MIN_REVEAL = 120;
     bytes32 constant DROP_ID = keccak256("fair-drop/auction-test");
 
@@ -26,14 +25,12 @@ contract AuctionDropTest is Deployers { // Deployers brings v4-core's own forge-
     address maker = makeAddr("maker");
     address verifier;
     uint256 verifierKey;
-    uint256 saleEnd;
     uint256 deploys;
     uint256 nextNullifier = 1;
 
     function setUp() public {
         deployFreshManagerAndRouters();
         (verifier, verifierKey) = makeAddrAndKey("verifier");
-        saleEnd = block.timestamp + 1 days;
     }
 
     // ─────────────── helpers ───────────────
@@ -46,9 +43,7 @@ contract AuctionDropTest is Deployers { // Deployers brings v4-core's own forge-
             supply: supply,
             fanUnits: fans,
             reservePrice: RESERVE,
-            spreadBps: SPREAD,
-            minRevealTime: MIN_REVEAL,
-            saleEnd: saleEnd
+            minRevealTime: MIN_REVEAL
         });
         // The low 14 bits carry the hook permissions; the high bits just make each deploy unique.
         address at = address(FLAGS | (uint160(++deploys) << 144));
@@ -319,7 +314,7 @@ contract AuctionDropTest is Deployers { // Deployers brings v4-core's own forge-
     function test_OnlyMakerOpensPool() public {
         _deploy(3, 0);
         // _deploy's pool is the maker's; a stranger can't open one on a fresh hook either.
-        AuctionDrop.Config memory c = AuctionDrop.Config(maker, verifier, DROP_ID, 3, 0, RESERVE, SPREAD, MIN_REVEAL, saleEnd);
+        AuctionDrop.Config memory c = AuctionDrop.Config(maker, verifier, DROP_ID, 3, 0, RESERVE, MIN_REVEAL);
         address at = address(FLAGS | (uint160(999) << 144));
         deployCodeTo("AuctionDrop.sol:AuctionDrop", abi.encode(manager, c), at);
         PoolKey memory k = PoolKey(Currency.wrap(address(0)), Currency.wrap(at), 0, 1, IHooks(at));
@@ -437,54 +432,35 @@ contract AuctionDropTest is Deployers { // Deployers brings v4-core's own forge-
         hook.claim();
     }
 
-    function test_SellBackPaysPricePaidMinusSpreadAndStaysSolvent() public {
+    /// The maker takes every wei the sale raised at settlement — before or after anyone claims — and
+    /// every bidder can still claim their refund in full afterwards.
+    function test_MakerWithdrawsEverythingAtSettlement() public {
         _deploy(3, 1);
         address[] memory who = _run(_amounts(5, 2, 4, 3, 6));
-        uint256 price = hook.clearingPrice();
+        uint256 raised = RESERVE + hook.auctionWinners() * hook.clearingPrice();
+        assertEq(hook.makerFunds(), raised);
+
+        vm.prank(maker);
+        hook.withdraw();
+        assertEq(maker.balance, raised, "maker gets the fan unit at the reserve plus every auction unit");
+        assertEq(hook.makerFunds(), 0);
 
         for (uint256 i; i < who.length; i++) {
             vm.prank(who[i]);
             hook.claim();
         }
-        // Maker takes everything above the buy-back liability, before anyone sells back.
-        vm.prank(maker);
-        hook.withdraw();
-        assertGe(_claims(), hook.liability());
-
-        for (uint256 i; i < who.length; i++) {
-            if (hook.balanceOf(who[i]) == 0) continue;
-            uint256 tokenId = _tokenOf(who[i]);
-            uint256 paid = hook.paidFor(tokenId);
-            assertTrue(paid == RESERVE || paid == price);
-            uint256 before = who[i].balance;
-            vm.prank(who[i]);
-            hook.sellBack(tokenId);
-            assertEq(who[i].balance - before, paid * (10_000 - SPREAD) / 10_000);
-            assertGe(_claims(), hook.makerFunds(), "every sell-back is paid out of what's held");
-        }
-        assertEq(hook.liability(), 0);
-
-        vm.warp(saleEnd);
-        vm.prank(maker);
-        hook.withdraw();
         assertEq(_claims(), 0, "every wei accounted for");
+        assertEq(hook.balanceOf(who[0]) + hook.balanceOf(who[1]) + hook.balanceOf(who[2]) + hook.balanceOf(who[3]) + hook.balanceOf(who[4]), 3);
     }
 
-    function test_SellBackClosesAtSaleEnd() public {
+    function test_OnlyMakerWithdraws() public {
         _deploy(1, 0);
-        uint256[] memory amounts = new uint256[](1);
-        amounts[0] = 2 ether;
-        address[] memory who = _run(amounts);
-        vm.prank(who[0]);
-        hook.claim();
-        vm.warp(saleEnd);
-        vm.prank(who[0]);
-        vm.expectRevert(AuctionDrop.SaleClosed.selector);
-        hook.sellBack(1);
+        vm.expectRevert(AuctionDrop.NotMaker.selector);
+        hook.withdraw();
     }
 
-    /// Random bids, deposits and reveals: uniform pricing holds, and after every claim, sell-back
-    /// and withdrawal the hook holds at least what it owes.
+    /// Random bids, deposits and reveals: uniform pricing holds, and whatever order claims and the
+    /// maker's withdrawal come in, the hook holds exactly what it owes and ends at zero.
     function testFuzz_RandomAuctionStaysSolvent(uint256 seed, uint8 count, uint8 supply, uint8 fans) public {
         uint256 n = bound(count, 1, 12);
         uint256 s = bound(supply, 1, 8);
@@ -521,41 +497,23 @@ contract AuctionDropTest is Deployers { // Deployers brings v4-core's own forge-
         }
         assertEq(_claims(), owed, "held = maker's share + every refund");
 
-        for (uint256 i; i < n; i++) {
-            if (!revealed[i]) continue;
-            vm.prank(who[i]);
-            hook.claim();
-            if ((seed >> (i + 200)) % 2 == 0) {
+        uint256 withdrawAt = seed % (n + 1); // maker withdraws before the i-th claim (or last)
+        for (uint256 i; i <= n; i++) {
+            if (i == withdrawAt) {
+                owed -= hook.makerFunds();
                 vm.prank(maker);
                 hook.withdraw();
+                assertEq(_claims(), owed);
             }
-            assertGe(_claims(), hook.liability());
-        }
-        for (uint256 i; i < n; i++) {
-            if (hook.balanceOf(who[i]) == 0 || (seed >> (i + 150)) % 3 == 0) continue;
-            uint256 tokenId = _tokenOf(who[i]); // before the prank: the lookup makes calls
+            if (i == n || !revealed[i]) continue;
+            (, uint128 deposit,,,,) = hook.bids(who[i]);
+            uint256 before = who[i].balance;
             vm.prank(who[i]);
-            hook.sellBack(tokenId);
-            assertGe(_claims(), hook.makerFunds());
+            hook.claim();
+            owed -= who[i].balance - before;
+            assertEq(_claims(), owed, "held = what is still owed");
+            assertLe(who[i].balance - before, deposit);
         }
-        vm.warp(saleEnd);
-        vm.prank(maker);
-        hook.withdraw();
         assertEq(_claims(), 0);
-    }
-
-    function _tokenOf(address who) internal view returns (uint256 id) {
-        for (id = 1; id <= hook.fanWinners() + hook.auctionWinners(); id++) {
-            if (hook.paidFor(id) != 0 && _ownerOrZero(id) == who) return id;
-        }
-        revert("no token");
-    }
-
-    function _ownerOrZero(uint256 id) internal view returns (address) {
-        try hook.ownerOf(id) returns (address o) {
-            return o;
-        } catch {
-            return address(0);
-        }
     }
 }

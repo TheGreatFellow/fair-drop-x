@@ -37,7 +37,7 @@ contract AuctionDropForkTest is Test {
         (verifier, verifierKey) = makeAddrAndKey("verifier");
 
         AuctionDrop.Config memory c =
-            AuctionDrop.Config(maker, verifier, DROP_ID, 2, 1, 0.0002 ether, 500, 120, block.timestamp + 1 days);
+            AuctionDrop.Config(maker, verifier, DROP_ID, 2, 1, 0.0002 ether, 120);
         address at = address(
             uint160(
                 Hooks.BEFORE_INITIALIZE_FLAG | Hooks.BEFORE_ADD_LIQUIDITY_FLAG | Hooks.BEFORE_SWAP_FLAG
@@ -101,6 +101,6 @@ contract AuctionDropForkTest is Test {
 
         vm.prank(maker);
         hook.withdraw();
-        assertEq(PM.balanceOf(address(hook), 0), hook.liability(), "only the buy-back reserve is left");
+        assertEq(PM.balanceOf(address(hook), 0), 0, "every deposit paid out: refunds + proceeds");
     }
 }

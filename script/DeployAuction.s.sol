@@ -30,12 +30,12 @@ contract DeployAuction is Script {
             maker: deployer,
             verifier: vm.envOr("VERIFIER_ADDRESS", deployer),
             dropId: keccak256(bytes(vm.envOr("AUCTION_DROP_ID", string("fair-drop/auction-1")))),
-            supply: vm.envOr("AUCTION_SUPPLY", uint256(5)),
-            fanUnits: vm.envOr("AUCTION_FAN_UNITS", uint256(2)),
+            // Demo size: 4 bidders already show a clearing price above 定価 (1 fan unit + 2 auction
+            // units + 1 highest loser who sets the price).
+            supply: vm.envOr("AUCTION_SUPPLY", uint256(3)),
+            fanUnits: vm.envOr("AUCTION_FAN_UNITS", uint256(1)),
             reservePrice: vm.envOr("AUCTION_RESERVE", uint256(0.0002 ether)),
-            spreadBps: vm.envOr("SPREAD_BPS", uint256(500)),
-            minRevealTime: vm.envOr("AUCTION_MIN_REVEAL_SECONDS", uint256(120)),
-            saleEnd: block.timestamp + vm.envOr("SALE_DURATION_HOURS", uint256(72)) * 1 hours
+            minRevealTime: vm.envOr("AUCTION_MIN_REVEAL_SECONDS", uint256(120))
         });
 
         uint160 flags = uint160(
@@ -61,7 +61,6 @@ contract DeployAuction is Script {
         console.log("supply        ", c.supply);
         console.log("fanUnits      ", c.fanUnits);
         console.log("reserve wei   ", c.reservePrice);
-        console.log("saleEnd       ", c.saleEnd);
         console.log("poolId        ", vm.toString(keccak256(abi.encode(key))));
     }
 }
