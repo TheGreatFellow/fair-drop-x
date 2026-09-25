@@ -236,9 +236,13 @@ One sealed-bid round for a drop of N units, of which X are fan units.
      optimal. Raffling among auction losers instead would reward bidding low on purpose.
    - Unrevealed bids forfeit their deposit.
 5. **Withdraw.** Pull-based: losers get their deposit back, winners get deposit minus price.
-6. **Sell-back.** After settlement, a holder can return a unit for the clearing price minus the
-   spread (default 5%). The contract keeps enough to buy back every unit until the sale closes — the
-   same solvency rule as Phase 1 (§6.4). A seller can never bid again.
+6. **Sell-back.** After settlement, a holder can return a unit for **the price that unit sold for**
+   minus the spread (default 5%): the clearing price for auction units, 定価 for fan units. The
+   contract keeps enough to buy back every unit until the sale closes — the same solvency rule as
+   Phase 1 (§6.4). A seller can never bid again (there is only one round).
+   - Why not the clearing price for fan units too (the original wording): a fan unit brought in only
+     定価, so paying it back at the clearing price comes out of the maker's pocket, and with many fan
+     units the contract can't cover every sell-back. Changed 2026-09-26 while building.
 
 Knobs: N, X, 定価 (reserve), spread, optional price cap (if demand at the cap exceeds the remaining
 units, those at the cap are raffled).
