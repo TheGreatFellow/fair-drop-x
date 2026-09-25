@@ -2,12 +2,18 @@
 pragma solidity ^0.8.28;
 
 import {ERC721} from "@openzeppelin/contracts/token/ERC721/ERC721.sol";
+import {EIP712} from "@openzeppelin/contracts/utils/cryptography/EIP712.sol";
+import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 
 /// @title Drop — fair-price limited-edition drop (SPEC §6.1)
 /// @notice The first `flatUnits` units sell at `basePrice` (the normal 定価). After that the
 ///         price rises along a curve, and steeply over the last units so the drop rarely fully
 ///         sells out. While the curve still has units, nobody rationally pays more elsewhere.
-contract Drop is ERC721 {
+///
+///         One unit per verified human: the backend verifies a World ID proof and signs an
+///         EIP-712 voucher carrying the nullifier, which this contract also records so the limit
+///         does not rest on the backend alone.
+contract Drop is ERC721, EIP712 {
     struct Config {
         address maker;
         address verifier;
@@ -21,6 +27,16 @@ contract Drop is ERC721 {
         uint256 spreadBps;
         uint256 saleEnd;
     }
+
+    struct Voucher {
+        bytes32 dropId;
+        address buyer;
+        uint256 nullifierHash;
+        uint256 deadline;
+    }
+
+    bytes32 private constant VOUCHER_TYPEHASH =
+        keccak256("Voucher(bytes32 dropId,address buyer,uint256 nullifierHash,uint256 deadline)");
 
     uint256 private constant BPS = 10_000;
 
@@ -38,10 +54,30 @@ contract Drop is ERC721 {
 
     /// @notice Units currently outstanding. This is the position on the curve.
     uint256 public sold;
+    /// @notice Ids are never reused, so a sold-back edition number never comes back.
+    uint256 public nextTokenId;
+    /// @notice Sum of price(i) for i < sold, maintained incrementally so the buy-back liability
+    ///         never needs a loop over the curve.
+    uint256 public curveSum;
+    mapping(uint256 nullifierHash => bool used) public nullifierUsed;
+
+    event Bought(uint256 indexed tokenId, address indexed buyer, uint256 price, uint256 nullifierHash);
 
     error BadConfig();
+    error SaleClosed();
+    error SoldOut();
+    error WrongDrop();
+    error WrongBuyer();
+    error VoucherExpired();
+    error AlreadyPurchased();
+    error BadSignature();
+    error Underpaid();
+    error TransferFailed();
 
-    constructor(string memory name_, string memory symbol_, Config memory c) ERC721(name_, symbol_) {
+    constructor(string memory name_, string memory symbol_, Config memory c)
+        ERC721(name_, symbol_)
+        EIP712("Drop", "1")
+    {
         // SPEC §6.1: 0 < flatUnits < steepStart <= supply, and a non-zero spread so churn is
         // never free for the seller (that spread is the maker's guaranteed income).
         if (c.flatUnits == 0 || c.flatUnits >= c.steepStart || c.steepStart > c.supply) revert BadConfig();
@@ -88,5 +124,48 @@ contract Drop is ERC721 {
         for (uint256 i; i < supply; ++i) {
             prices[i] = price(i);
         }
+    }
+
+    // --- core ---
+
+    /// @notice Buy one unit, gated by a backend voucher proving a World ID verification.
+    function buy(Voucher calldata v, bytes calldata sig) external payable {
+        if (block.timestamp >= saleEnd) revert SaleClosed();
+        if (sold >= supply) revert SoldOut();
+        if (v.dropId != dropId) revert WrongDrop();
+        if (v.buyer != msg.sender) revert WrongBuyer();
+        if (block.timestamp > v.deadline) revert VoucherExpired();
+        if (nullifierUsed[v.nullifierHash]) revert AlreadyPurchased();
+        if (ECDSA.recover(hashVoucher(v), sig) != verifier) revert BadSignature();
+
+        uint256 p = price(sold);
+        if (msg.value < p) revert Underpaid();
+
+        // Set for good: a human who later sells back still cannot buy again (SPEC §3.1).
+        nullifierUsed[v.nullifierHash] = true;
+        sold += 1;
+        curveSum += p;
+
+        uint256 tokenId = ++nextTokenId;
+        _safeMint(msg.sender, tokenId);
+        _afterMint(tokenId, msg.sender);
+        emit Bought(tokenId, msg.sender, p, v.nullifierHash);
+
+        if (msg.value > p) _send(msg.sender, msg.value - p);
+    }
+
+    // --- Phase 2 (ENS subnames) hooks in here without touching buy ---
+
+    function _afterMint(uint256 tokenId, address to) internal virtual {}
+
+    // --- internals ---
+
+    function hashVoucher(Voucher calldata v) public view returns (bytes32) {
+        return _hashTypedDataV4(keccak256(abi.encode(VOUCHER_TYPEHASH, v.dropId, v.buyer, v.nullifierHash, v.deadline)));
+    }
+
+    function _send(address to, uint256 amount) private {
+        (bool ok,) = to.call{value: amount}("");
+        if (!ok) revert TransferFailed();
     }
 }
