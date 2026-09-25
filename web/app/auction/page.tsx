@@ -45,6 +45,7 @@ const REJECTIONS: Record<string, string> = {
   signal_mismatch: "That verification was made for a different wallet. Verify again with this wallet connected.",
   wrong_credential: "This drop needs an Orb-verified World ID.",
   rp_signature_expired: "The verification request expired. Please try again.",
+  environment_not_allowed: "World ID test verification is closed for this app right now. The site owner needs to reopen it.",
 };
 
 const yen = (n: number) => `¥${Math.round(n).toLocaleString("ja-JP")}`;

@@ -104,10 +104,18 @@ export async function verifyProof(result: IDKitResult, buyer: Address): Promise<
     }
   }
 
+  // Since 2026-09-25 World refuses staging proofs unless the app's team opened a 24h staging window
+  // (portal MCP tool set_world_id_staging_verification) and the call carries the token it issued.
+  // Never sent for production: that's what keeps simulator identities out of a production drop.
+  const headers: Record<string, string> = { "content-type": "application/json" };
+  if (environment !== "production" && process.env.WORLD_STAGING_TOKEN) {
+    headers["x-staging-verification-token"] = process.env.WORLD_STAGING_TOKEN;
+  }
+
   // Forward only the fields World defines, not whatever else the client sent.
   const res = await fetch(`${VERIFY_URL}/${env("WORLD_RP_ID")}`, {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers,
     body: JSON.stringify({
       protocol_version: result.protocol_version,
       nonce: result.nonce,
@@ -119,7 +127,7 @@ export async function verifyProof(result: IDKitResult, buyer: Address): Promise<
   const data = await res.json().catch(() => ({}));
   if (!res.ok || !data?.success) {
     // World's codes pass through (e.g. max_verifications_reached, nullifier_replayed,
-    // rp_signature_expired) so the frontend can say something specific.
+    // rp_signature_expired, environment_not_allowed) so the frontend can say something specific.
     throw new Rejection(400, data?.code ?? "verification_failed", data?.detail ?? "World ID verification failed");
   }
 

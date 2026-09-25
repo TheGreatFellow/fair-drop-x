@@ -93,6 +93,29 @@ test("valid proof: returns World's nullifier and calls our RP with only World's 
   ]);
 });
 
+test("staging calls carry the staging-window token; production calls never do", async () => {
+  const saved = { token: process.env.WORLD_STAGING_TOKEN, env: process.env.WORLD_ENVIRONMENT };
+  process.env.WORLD_STAGING_TOKEN = "stg_test_token";
+  try {
+    for (const environment of ["staging", "production"]) {
+      process.env.WORLD_ENVIRONMENT = environment;
+      const fetchMock = worldReplies(200, {
+        success: true,
+        environment,
+        nullifier: "0x01",
+        results: [{ identifier: "proof_of_human", success: true }],
+      });
+      await verifyProof({ ...proofFor(BUYER), environment }, BUYER);
+      const headers = (fetchMock.mock.calls[0].arguments[1] as RequestInit).headers as Record<string, string>;
+      assert.equal(headers["x-staging-verification-token"], environment === "staging" ? "stg_test_token" : undefined);
+      mock.restoreAll();
+    }
+  } finally {
+    process.env.WORLD_STAGING_TOKEN = saved.token;
+    process.env.WORLD_ENVIRONMENT = saved.env;
+  }
+});
+
 test("falls back to the per-result nullifier when World omits the top-level one", async () => {
   worldReplies(200, {
     success: true,
