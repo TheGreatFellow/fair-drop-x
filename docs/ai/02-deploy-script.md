@@ -23,3 +23,23 @@ proposed next steps: deploy script + Sepolia deploy)
 
 The simulation output doubles as the check that the demo config satisfies the constructor's
 `0 < flatUnits < steepStart <= supply` and non-zero-spread constraints.
+
+## Deployed
+
+Sepolia, 2026-09-25: `0x897d36a3d028776c3cdfc2e5a468544fdd1eb9d3`
+(tx `0x30c709885fd6ec500995d3d3cb538788949f03215174395a49b710c7029997bc`).
+
+Deployed over a public Sepolia endpoint rather than Infura, because the Infura key was not yet
+available and deploying once does not need a dedicated endpoint. The frontend should move to a
+dedicated RPC before judging, since public endpoints rate-limit under load.
+
+Source is verified on Sourcify with an exact creation and runtime bytecode match. Etherscan
+verification was not done at deploy time: there is no Etherscan API key in `.env` yet, and
+Sourcify's relayed Etherscan submission hit its shared daily rate limit. Routescan picked it up.
+Worth revisiting with an own API key before submission, since judges clicking through to
+verified source on Etherscan is free credibility.
+
+`saleEnd` is 2026-09-28T12:39:36Z — deliberately after the Sunday 09:00 JST submission deadline,
+so the sale is still open while judges buy. The consequence is that `redeem()` and the
+after-close branch of `withdraw()` cannot be demonstrated on this deployment; a second
+short-lived drop would be needed to show those.

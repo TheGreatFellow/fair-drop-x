@@ -1,0 +1,19 @@
+{
+  "chain": "sepolia",
+  "chainId": 11155111,
+  "drop": "0x897d36a3d028776c3cdfc2e5a468544fdd1eb9d3",
+  "deployTx": "0x30c709885fd6ec500995d3d3cb538788949f03215174395a49b710c7029997bc",
+  "maker": "0xF0E135c4c36Ba36429E00a3680E64fA440Ec65fD",
+  "verifier": "0xe8099d0E4e16be5901723025F711631526d2ff05",
+  "dropId": "0x64f7af12f57ad832dea3222b17888594a0a2418acf672efe4526d73da512aa49",
+  "dropIdPreimage": "fair-drop/demo-1",
+  "supply": 20,
+  "basePriceWei": "200000000000000",
+  "flatUnits": 3,
+  "slopeWei": "50000000000000",
+  "steepStart": 18,
+  "steepSlopeWei": "500000000000000",
+  "spreadBps": 500,
+  "saleEnd": 1790599176,
+  "saleEndISO": "2026-09-28T12:39:36Z"
+}
