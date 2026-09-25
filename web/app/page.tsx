@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import { IDKitRequestWidget, proofOfHuman, type IDKitResult, type RpContext } from "@worldcoin/idkit";
 import { BaseError, ContractFunctionRevertedError, formatEther, type Hex } from "viem";
@@ -301,8 +302,14 @@ export default function DropPage() {
 
   return (
     <main className="mx-auto w-full max-w-5xl px-5 py-8">
-      <header className="mb-8 flex items-center justify-between">
-        <div className="text-lg font-semibold tracking-tight">Fair Drop</div>
+      <header className="mb-8 flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-4">
+          <div className="text-lg font-semibold tracking-tight">Fair Drop</div>
+          <nav className="flex gap-1 text-sm">
+            <Link href="/auction" className="rounded-full px-3 py-1" style={{ color: "var(--text-secondary)" }}>Auction</Link>
+            <span className="rounded-full px-3 py-1 font-medium" style={{ background: "color-mix(in srgb, var(--series-1) 12%, transparent)", color: "var(--series-1)" }}>Curve drop</span>
+          </nav>
+        </div>
         <div className="flex items-center gap-3">
         {TEST_BUYS && (
           <label className="flex cursor-pointer items-center gap-2 text-sm" style={{ color: "var(--text-secondary)" }}>
