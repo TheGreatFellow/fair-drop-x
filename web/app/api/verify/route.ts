@@ -26,6 +26,9 @@ export async function POST(request: Request) {
 
   try {
     const nullifier = await verifyProof(body.result ?? {}, buyer);
+    // Public anyway (it lands onchain in Bought). Logged so a repeat verification by the same
+    // person can be compared: World ID 4.0 docs never state the nullifier is deterministic.
+    console.log(`verify: ${buyer} nullifier 0x${nullifier.toString(16).padStart(64, "0")}`);
     if (await isNullifierUsed(nullifier)) {
       return Response.json(
         { code: "already_purchased", message: "This person has already bought from this drop" },
