@@ -27,6 +27,8 @@ const MERCARI_MULTIPLE = 10;
 const APP_ID = process.env.NEXT_PUBLIC_WORLD_APP_ID as `app_${string}`;
 const ACTION = process.env.NEXT_PUBLIC_WORLD_ACTION as string;
 const ENVIRONMENT = process.env.NEXT_PUBLIC_WORLD_ENVIRONMENT as "production" | "staging";
+// The server decides whether test mode exists at all (never in production); see api/test-voucher.
+const TEST_BUYS = process.env.NEXT_PUBLIC_TEST_BUYS === "true";
 
 const drop = { address: DROP_ADDRESS, abi: dropAbi } as const;
 
@@ -107,6 +109,8 @@ export default function DropPage() {
   const [pending, setPending] = useState<Signed | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [notice, setNotice] = useState<Notice>(null);
+  const [worldIdOn, setWorldIdOn] = useState(true);
+  const testMode = TEST_BUYS && !worldIdOn;
   // Ticks so "sale open" flips to "redeem" on its own when saleEnd passes.
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
@@ -163,6 +167,26 @@ export default function DropPage() {
     } finally {
       setBusy(null);
     }
+  }
+
+  // Test mode: skip World ID, get a voucher under a random nullifier, buy straight away.
+  async function testBuy() {
+    setNotice(null);
+    setBusy("Getting a test voucher…");
+    try {
+      const res = await fetch("/api/test-voucher", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ buyer: address }),
+      });
+      if (!res.ok) throw new Error("Test mode is not enabled on the server.");
+      signedRef.current = await res.json();
+    } catch (e) {
+      setNotice({ tone: "bad", text: e instanceof Error ? e.message : String(e) });
+      setBusy(null);
+      return;
+    }
+    await buy();
   }
 
   async function startVerify() {
@@ -272,8 +296,9 @@ export default function DropPage() {
     );
   else
     action = (
-      <button className={primaryBtn} style={{ background: "var(--series-1)" }} disabled={!!busy} onClick={() => void startVerify()}>
-        {busy ?? `Verify with World ID & buy for ${yen(toYen(currentPrice))}`}
+      <button className={primaryBtn} style={{ background: testMode ? "var(--bad)" : "var(--series-1)" }} disabled={!!busy}
+        onClick={() => void (testMode ? testBuy() : startVerify())}>
+        {busy ?? (testMode ? `Test buy (no World ID) for ${yen(toYen(currentPrice))}` : `Verify with World ID & buy for ${yen(toYen(currentPrice))}`)}
       </button>
     );
 
@@ -281,13 +306,35 @@ export default function DropPage() {
     <main className="mx-auto w-full max-w-5xl px-5 py-8">
       <header className="mb-8 flex items-center justify-between">
         <div className="text-lg font-semibold tracking-tight">Fair Drop</div>
+        <div className="flex items-center gap-3">
+        {TEST_BUYS && (
+          <label className="flex cursor-pointer items-center gap-2 text-sm" style={{ color: "var(--text-secondary)" }}>
+            World ID
+            <button role="switch" aria-checked={worldIdOn} onClick={() => setWorldIdOn((v) => !v)}
+              className="relative h-6 w-11 rounded-full transition"
+              style={{ background: worldIdOn ? "var(--good)" : "var(--bad)" }}>
+              <span className="absolute top-0.5 h-5 w-5 rounded-full bg-white transition-all"
+                style={{ left: worldIdOn ? "1.375rem" : "0.125rem" }} />
+            </button>
+            <span className="w-6 font-medium">{worldIdOn ? "On" : "Off"}</span>
+          </label>
+        )}
         {isConnected && address && (
           <button className="rounded-full px-3 py-1.5 text-sm" style={{ border: "1px solid var(--border)", color: "var(--text-secondary)" }}
             onClick={() => disconnect.mutate({})}>
             {address.slice(0, 6)}…{address.slice(-4)} · Disconnect
           </button>
         )}
+        </div>
       </header>
+
+      {testMode && (
+        <div role="alert" className="mb-6 rounded-xl px-4 py-3 text-sm font-medium"
+          style={{ color: "var(--bad)", background: "color-mix(in srgb, var(--bad) 12%, transparent)" }}>
+          Test mode: World ID verification is OFF. Each buy uses a random made-up identity, so one wallet can buy
+          many units. Not the real flow — switch World ID back on for demos.
+        </div>
+      )}
 
       <div className="grid items-start gap-6 md:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]">
         <section className={card} style={cardStyle}>
