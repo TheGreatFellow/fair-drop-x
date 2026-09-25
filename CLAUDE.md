@@ -4,7 +4,10 @@ Hackathon project for ETHGlobal Tokyo 2026. Full context and all product decisio
 
 ## Phases (SPEC §4)
 1. Core + World ID — build this first, fully working. **This is the submission.**
-2. Uniswap pay-with-any-token — only if Phase 1 works end-to-end with hours to spare.
+2. Uniswap — only if Phase 1 works end-to-end with hours to spare. Two routes (SPEC §8):
+   A) pay-with-any-token via Trading API, or B) Vickrey auction as a v4 hook (stretch).
+   Either must be additive — never modify `Drop.sol` or the Phase 1 demo. Route B lives on a
+   branch until it passes its tests; abandon it if it isn't working 2h before submission.
 
 ENSv2 subnames were descoped on 2026-09-25 (reasoning in SPEC §5). Do not start ENS work.
 Never start a phase before the previous one works end-to-end. Tell me if we're behind schedule.

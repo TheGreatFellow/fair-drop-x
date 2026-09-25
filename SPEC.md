@@ -29,18 +29,24 @@ Each phase must be fully working, committed and demo-able before starting the ne
 | Phase | Scope | Prize target | Target done by |
 |---|---|---|---|
 | **1. Core + World** | Contract (flat price → curve, buy, sell-back, withdraw), World ID verification backend, drop page | World — Best Use of IDKit ($7,500) | Sat afternoon |
-| **2. Uniswap (only if Phase 1 is fully done)** | Pay with any token via the Uniswap Trading API | Uniswap — Best Stack Contribution ($6,000, 3 places) | Sun early morning, or skip |
+| **2. Uniswap (only if Phase 1 is fully done)** | One of two routes, by time remaining: **A** pay with any token via the Trading API, or **B** Vickrey auction as a v4 hook | Uniswap — Best Stack Contribution ($6,000, 3 places) | Sun early morning, or skip |
 
 **Phase 1 is the submission.** Phase 2 is started only once the contract, the World ID backend
 and the frontend all work end to end, and only if that happens with hours to spare. A polished
 Phase 1 beats a broken Phase 2 — one finished integration beats two half-built ones.
+
+Phase 2 has two routes to the same prize (§8). Route A is a few hours and shallow; Route B is the
+ambitious one and is a **stretch goal only**. Whichever is attempted, it is additive: it must not
+modify `Drop.sol` or the Phase 1 demo.
 
 ## 5. Explicitly out of scope (decided, do not build)
 
 - Demand-triggered production runs (items are fixed limited editions).
 - Same-human-only redemption, transfer locks, claim restrictions.
 - Uniform clearing-price auction.
-- Uniswap v4 custom-curve hook (too risky solo; Phase 2 uses the simpler Trading API integration).
+- Uniswap v4 custom-curve hook **for the main drop** — i.e. replacing `price(i)` with an AMM curve.
+  Too risky solo, and it would discard the flat fan price. (A v4 hook for a *separate* Vickrey
+  auction drop is in scope as a stretch goal — see §8.2.)
 - **ENSv2 subnames (descoped 2026-09-25).** Giving each unit a subname like `042.drop.maker.eth`
   is decoration: the NFT stays the source of truth and nothing reads the name, which fails ENS's
   "central, not cosmetic" bar. The one genuinely non-cosmetic angle is that this drop's units
@@ -48,11 +54,10 @@ Phase 1 beats a broken Phase 2 — one finished integration beats two half-built
   real Permissioned Registry lifecycle work most projects never exercise. Not worth the risk of a
   Sepolia beta API against a $6,000 prize split three ways while Phase 1 is unfinished. The
   `_afterMint` / `_beforeBurn` hooks are already deployed, so this stays cheap to revisit.
-- **Sealed-bid / Vickrey auction.** Suggested at the Uniswap booth as a deeper integration. It
-  would replace the mechanism, not extend it: an auction makes fans pay their full willingness to
-  pay, which is the scalper outcome this project exists to prevent, and it discards the fixed fan
-  price that distinguishes us from Unisocks. Sealed bids also can't live in an AMM — swaps are
-  public and atomic — so it would need a v4 hook, already ruled out above.
+- **Replacing the flat-then-curve mechanism with an auction.** An auction makes fans pay their full
+  willingness to pay, which is the scalper outcome this project exists to prevent, and it discards
+  the fixed fan price that distinguishes us from Unisocks. A Vickrey auction as an *additional,
+  separate* drop type is a stretch goal (§8.2); swapping out the Phase 1 mechanism is not.
 
 ---
 
@@ -196,12 +201,20 @@ rather than cosmetic. The deployed `_afterMint` / `_beforeBurn` hooks keep it re
 cost, and if it is ever revisited the angle worth building is name revocation on sell-back with
 expiry tied to the redemption deadline — lifecycle work, not naming.
 
-## 8. Phase 2 — Uniswap integration (only if Phase 1 is fully done, with hours to spare)
+## 8. Phase 2 — Uniswap (only if Phase 1 is fully done, with hours to spare)
 
-**Pay with any token:** buyers holding another token get it swapped to the drop's payment currency via the Uniswap Trading API, then `buy()` runs.
-Requirements: public repo, **`FEEDBACK.md`**, completed Uniswap Developer Feedback Form linking to it, README pointing to the exact contracts/lines of the integration.
+Two routes to the same prize. Pick by how much time is actually left, and in both cases the work
+is **additive**: `Drop.sol`, its 34 tests and the Phase 1 demo must not change.
 
-### What was checked at the event (2026-09-25)
+Shared requirements for either route: public repo, **`FEEDBACK.md`**, completed Uniswap Developer
+Feedback Form linking to it, README pointing to the exact contracts/lines of the integration.
+
+### 8.1 Route A — pay with any token (Trading API)
+
+Buyers holding another token get it swapped to the drop's payment currency via the Uniswap Trading
+API, then `buy()` runs. A few hours of work, and shallow by the Uniswap team's own assessment.
+
+What was checked at the event (2026-09-25):
 
 - **Sepolia is supported.** Chain ID 11155111 is listed, and the docs say all listed testnets are
   reachable through the API. The warning in `REFERENCES.md` that it might not support Sepolia is
@@ -212,15 +225,45 @@ Requirements: public repo, **`FEEDBACK.md`**, completed Uniswap Developer Feedba
   checked. Before building anything: get a key and request one quote. If no route comes back, the
   integration demos as a failing swap, which is worse than not integrating at all.
 - **The Uniswap team's own read is that this is shallow** — similar to any bonding-curve project.
-  Accepted. It is a convenience feature, not a prize strategy. Ask how much of "Best Stack
-  Contribution" is scored on `FEEDBACK.md` and the feedback form versus integration depth; if
-  feedback carries real weight, a thin integration plus honest feedback may still place.
-- **Anything deeper conflicts with the solvency invariant.** The reserve backs the buy-back
-  liability (§6.4); routing it through an AMM adds price risk and breaks the guarantee that is
-  this project's strongest technical asset. Uniswap therefore belongs only at the payment edges:
-  swap in before `buy()`, swap out after `sellBack()`.
+  Ask how much of "Best Stack Contribution" is scored on `FEEDBACK.md` and the feedback form
+  versus integration depth; if feedback carries real weight, a thin integration plus honest
+  feedback may still place.
 
----
+### 8.2 Route B — Vickrey auction as a Uniswap v4 hook (stretch goal)
+
+Suggested by the Uniswap team as the genuinely deep integration. A **second, separate** drop type:
+a sealed-bid second-price auction for a limited edition, implemented as a v4 hook, sitting
+alongside the flat-then-curve `Drop.sol` rather than replacing it. Same World ID one-per-human
+gate, so the anti-scalping thesis still holds — it becomes "one bid per human" instead of
+"one purchase per human".
+
+**Sketch.** Bidders commit `keccak256(amount, salt, bidder)` during a bidding window, reveal
+after it closes, and the top bidder pays the second-highest price. The hook's job is to make the
+pool respect the auction: `beforeSwap` rejects ordinary swaps while bidding or revealing is open,
+so the pool cannot be traded around the auction, and settlement happens at the clearing price once
+revealed.
+
+**Known hard parts — read before starting, these are why it is a stretch:**
+
+1. **Sealed bids fight the AMM.** v4 swaps are public and atomic; sealed bidding needs bids hidden
+   until reveal. Commit–reveal is the only realistic route solo, which means two transactions per
+   bidder plus a reveal window, and a bidder who never reveals needs a forfeited deposit.
+2. **It cannot be demoed live in 4 minutes.** A bid window plus a reveal window does not fit the
+   §9 script. Plan on pre-seeded bids with the reveal shown live, or a recorded segment. Decide
+   this *before* building, not after.
+3. **Hook plumbing is the real cost, not the auction.** Correct `beforeSwap` return values, hook
+   permission flags in the address, and pool initialisation against the Sepolia v4 PoolManager are
+   where solo attempts stall. Budget for the plumbing, not the economics.
+4. **Keep it away from the reserve.** The Phase 1 solvency invariant (§6.4) holds because the
+   reserve only ever moves along `price(i)`. The auction contract must hold its own funds; it must
+   never touch `Drop.sol`'s balance.
+5. **Abandonment plan.** If the hook is not deployed and passing tests with two hours left before
+   submission, drop it and submit Phase 1. Committed-but-broken stretch code in the repo is worse
+   than no stretch code, so keep it on a branch until it works.
+
+**Tests required before it counts as working:** highest bidder wins and pays the second price;
+a single bidder pays their own bid or a reserve price; unrevealed bids forfeit; no ordinary swap
+can execute while the auction is open; one bid per World ID nullifier.
 
 ## 9. Demo script (4 min + 3 min Q&A)
 
@@ -246,6 +289,8 @@ For the demo, deploy with a small `flatUnits` (e.g. 2–3) so the curve kicks in
 
 ## 12. Build order
 1. **Phase 1:** contract + tests (flat price → curve, buy with voucher, sell-back, withdraw, solvency + maker-never-loses fuzz, cascade tests) → deploy to Sepolia → IDKit backend + voucher → frontend → World debrief. Commit.
-2. **Phase 2 (only if Phase 1 is fully working with hours to spare):** check Sepolia liquidity
-   with one Trading API quote, then Uniswap pay-with-any-token + FEEDBACK.md. Commit.
+2. **Phase 2 (only if Phase 1 is fully working with hours to spare):** pick a route by time left.
+   Route A — check Sepolia liquidity with one Trading API quote, then pay-with-any-token.
+   Route B (stretch) — Vickrey auction v4 hook on a branch, merged only once it passes §8.2's
+   tests. Either way: FEEDBACK.md + feedback form. Commit.
 4. Final: README, demo video, AI attribution, submit with buffer before 09:00 JST Sunday.
