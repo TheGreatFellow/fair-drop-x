@@ -1,0 +1,22 @@
+{
+  "chain": "sepolia",
+  "chainId": 11155111,
+  "auction": "0xec6239640c6531F97bD2a7d84115c6094a4B2888",
+  "deployTx": "0x2ca4dd81acc95fc7fac574ce5f0227c1415768c4535167a72158701290a78baa",
+  "initPoolTx": "0x938e271b4e671f5d67cd5b82a65cdd2de1da290624fd1b9fe321df982a303b51",
+  "poolManager": "0xE03A1074c86CFeDd5C142C4F04F1a1536e203543",
+  "universalRouter": "0x3A9D48AB9751398BbFa63ad67599Bb04e4BdF98b",
+  "poolFee": 0,
+  "tickSpacing": 1,
+  "maker": "0xF0E135c4c36Ba36429E00a3680E64fA440Ec65fD",
+  "verifier": "0xe8099d0E4e16be5901723025F711631526d2ff05",
+  "dropId": "0xae45b150fa5f1c0b052ea3a0783ac27b3059da609942cac8b9e95a9d81762dfc",
+  "dropIdPreimage": "fair-drop/auction-1",
+  "supply": 5,
+  "fanUnits": 2,
+  "reservePriceWei": "200000000000000",
+  "spreadBps": 500,
+  "minRevealSeconds": 120,
+  "saleEnd": 1790631720,
+  "deployBlock": 11781947
+}
