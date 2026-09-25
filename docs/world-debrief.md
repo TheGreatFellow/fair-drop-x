@@ -66,6 +66,17 @@ be substituted.
     proof is broken, when the truth is "you already bought one". There is no way to pass a message
     through; we close the widget ourselves and show our own.
 
+11. **The simulator can only be one v4 person.** For World ID 4.0 requests, the hosted simulator's
+    sidecar auto-selects a pre-configured identity from the requested credential
+    (`identity_index` is "deprecated and ignored"), so every `proof_of_human` proof carries the same
+    nullifier — across identity switches, fresh browsers, everything. The in-browser identity
+    switcher only affects v3 proofs. So a one-per-human app cannot test "a second human can buy" on
+    staging with v4 at all. We confirmed it with a diagnostic (the proof's own nullifier, World's
+    top-level field and its per-result field were identical from two browsers) and then in the
+    simulator's source. Missing capability: a way to pick among several v4 test identities.
+    The tempting workaround — enabling legacy v3 proofs to get switchable identities — would open a
+    real hole: one person could then buy once with a v3 proof and once with a v4 one.
+
 ## Confirmed by testing
 
 - **Nullifiers are deterministic per person and action.** One simulator identity verified five
