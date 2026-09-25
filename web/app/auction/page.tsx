@@ -507,11 +507,11 @@ export default function AuctionPage() {
                       <span className="truncate" style={{ fontWeight: you ? 600 : 400 }}>{you ? "You" : short(r.bidder)}</span>
                       <div className="relative h-7">
                         {r.revealed ? (
-                          <div className="absolute inset-y-0 left-0 rounded" style={{ width: pct(toYen(r.amount)), background: color, opacity: phase === "Settled" && !r.outcome ? 0.35 : 0.9 }} />
+                          <div className="absolute inset-y-0 left-0 z-0 rounded" style={{ width: pct(toYen(r.amount)), background: color, opacity: phase === "Settled" && !r.outcome ? 0.35 : 0.9 }} />
                         ) : (
-                          <div className="absolute inset-y-0 left-0 rounded" style={{ width: "100%", background: "repeating-linear-gradient(45deg, var(--grid) 0 6px, transparent 6px 12px)" }} />
+                          <div className="absolute inset-y-0 left-0 z-0 rounded" style={{ width: "100%", background: "repeating-linear-gradient(45deg, var(--grid) 0 6px, transparent 6px 12px)" }} />
                         )}
-                        <span className="absolute inset-y-0 left-2 flex items-center text-xs font-medium" style={{ color: "var(--text-primary)" }}>
+                        <span className="absolute inset-y-0 left-2 z-[2] flex items-center text-xs font-medium" style={{ color: "var(--text-primary)" }}>
                           {r.revealed ? yen(toYen(r.amount)) : `🔒 deposit ${yen(toYen(r.deposit))}`}
                           {tag && <span className="ml-2" style={{ color: "var(--text-secondary)" }}>{tag}</span>}
                         </span>
@@ -521,7 +521,7 @@ export default function AuctionPage() {
                 })}
               </ul>
               {phase !== "Bidding" && (
-                <div className="pointer-events-none absolute inset-y-0 right-0" style={{ left: "calc(6.5rem + 0.75rem)" }}>
+                <div className="pointer-events-none absolute inset-y-0 right-0 z-[1]" style={{ left: "calc(6.5rem + 0.75rem)" }}>
                   <div className="absolute inset-y-0 border-l border-dashed" style={{ left: pct(YEN_FOR_RESERVE), borderColor: "var(--good)" }} />
                   {phase === "Settled" && auctionWinners > 0n && (
                     <div className="absolute inset-y-0 border-l-2" style={{ left: pct(toYen(clearing)), borderColor: "var(--series-1)" }} />
