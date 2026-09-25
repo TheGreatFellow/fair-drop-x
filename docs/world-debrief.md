@@ -22,9 +22,19 @@ be substituted.
 
 ## Time to first success
 
-- First correctly signed RP request accepted by World's v4 endpoint: _pending the first real proof._
-- First real proof verified end to end (staging simulator → World v4 verify → EIP-712 voucher →
-  onchain `buy()`): achieved 2026-09-26. _Elapsed time: to be filled in by the builder._
+Measured from git history and the chain, not recalled:
+
+| Milestone | When (JST) | Elapsed |
+|---|---|---|
+| First World ID code: IDKit v4 config added | Fri 23:00 | 0:00 |
+| Signing key validated, staging chosen | Fri 23:45 | 0:45 |
+| RP signing + server-side verification, 13 tests | Sat 00:26 | 1:26 |
+| Drop page with the IDKit widget | Sat 00:39 | 1:39 |
+| **First real proof verified end to end** — simulator → World v4 verify → EIP-712 voucher → onchain `buy()` ([Sepolia block 11780192](https://sepolia.etherscan.io/block/11780192)) | **Sat 00:43** | **1:43** |
+
+About **1h45m from the first line of World ID code to a verified onchain purchase**, and four
+minutes from the page existing to the first success. Roughly half of that time went to the friction
+below — mostly items 1–5, which are documentation gaps rather than code.
 
 ## Friction, in the order we hit it
 

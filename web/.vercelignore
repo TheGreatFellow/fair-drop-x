@@ -1,0 +1,6 @@
+# Secrets reach Vercel as project environment variables, never as uploaded files.
+.env
+.env*
+node_modules
+.next
+test
