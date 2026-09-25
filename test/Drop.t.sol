@@ -76,6 +76,30 @@ contract DropTest is Test {
         heldIds.push(tokenId);
     }
 
+    function _sellBackAt(uint256 index) internal {
+        address holder = holders[index];
+        uint256 tokenId = heldIds[index];
+        vm.prank(holder);
+        drop.sellBack(tokenId);
+        holders[index] = holders[holders.length - 1];
+        heldIds[index] = heldIds[heldIds.length - 1];
+        holders.pop();
+        heldIds.pop();
+    }
+
+    /// Everything the maker has received and not paid back out: contract balance plus withdrawals.
+    function _makerCash() internal view returns (uint256) {
+        return address(drop).balance + maker.balance;
+    }
+
+    function _assertInvariants() internal view {
+        // SPEC §6.1 solvency: every outstanding unit is always buy-backable.
+        assertGe(address(drop).balance, drop.liability(), "solvency");
+        // SPEC §6.1 maker-never-loses.
+        assertGe(_makerCash(), drop.curveSum(), "maker cash >= curve revenue of units still sold");
+        assertGe(_makerCash(), drop.sold() * BASE_PRICE, "maker cash >= sold * basePrice");
+    }
+
     // --- pricing (SPEC §6.1) ---
 
     function test_FlatPhaseIsBasePrice() public view {
@@ -229,6 +253,155 @@ contract DropTest is Test {
         (, uint256 second) = _buy();
         assertEq(first, 1);
         assertEq(second, 2);
+    }
+
+    // --- sell-back ---
+
+    function test_SellBackPaysBelowWhatLastBuyerPaid() public {
+        for (uint256 i; i < FLAT_UNITS + 5; ++i) {
+            _buy();
+        }
+        uint256 lastPaid = drop.price(drop.sold() - 1);
+        uint256 payout = drop.currentSellBackPrice();
+        assertLt(payout, lastPaid, "payout must be below the last purchase price");
+        assertEq(payout, lastPaid * (10_000 - SPREAD_BPS) / 10_000);
+
+        uint256 index = holders.length - 1;
+        address holder = holders[index];
+        uint256 before = holder.balance;
+        _sellBackAt(index);
+        assertEq(holder.balance - before, payout);
+        _assertInvariants();
+    }
+
+    function test_SellBackLowersPriceForNextBuyer() public {
+        for (uint256 i; i < FLAT_UNITS + 5; ++i) {
+            _buy();
+        }
+        uint256 priceBefore = drop.currentPrice();
+        _sellBackAt(holders.length - 1);
+        assertEq(drop.currentPrice(), priceBefore - SLOPE);
+    }
+
+    function test_SellBackPayoutRoundsDown() public {
+        // price(20) == 3150; 3150 * 9500 / 10000 == 2992.5 -> 2992.
+        for (uint256 i; i < FLAT_UNITS + 1; ++i) {
+            _buy();
+        }
+        assertEq(drop.price(FLAT_UNITS), 3150);
+        assertEq(drop.currentSellBackPrice(), 2992);
+    }
+
+    /// Selling back must not free the human to buy again (SPEC §3.1, no cycling).
+    function test_SellBackDoesNotFreeNullifier() public {
+        address buyer = address(0xB0B);
+        vm.deal(buyer, 1 ether);
+        (Drop.Voucher memory v, bytes memory sig) = _voucher(buyer, 42);
+        vm.prank(buyer);
+        drop.buy{value: BASE_PRICE}(v, sig);
+
+        vm.prank(buyer);
+        drop.sellBack(1);
+
+        vm.prank(buyer);
+        vm.expectRevert(Drop.AlreadyPurchased.selector);
+        drop.buy{value: BASE_PRICE}(v, sig);
+    }
+
+    /// Sold-back units return to the drop and can be bought again by someone else.
+    function test_SoldBackUnitsAreBuyableAgain() public {
+        for (uint256 i; i < 30; ++i) {
+            _buy();
+        }
+        _sellBackAt(holders.length - 1);
+        assertEq(drop.unitsLeft(), SUPPLY - 29);
+        (, uint256 tokenId) = _buy();
+        assertEq(drop.sold(), 30);
+        assertEq(tokenId, 31, "edition numbers are never reused");
+        _assertInvariants();
+    }
+
+    function test_SellBackRejectsNonOwner() public {
+        _buy();
+        vm.prank(address(0xBAD));
+        vm.expectRevert(Drop.NotOwner.selector);
+        drop.sellBack(1);
+    }
+
+    function test_SellBackClosesWithSale() public {
+        (address buyer,) = _buy();
+        vm.warp(saleEnd);
+        vm.prank(buyer);
+        vm.expectRevert(Drop.SaleClosed.selector);
+        drop.sellBack(1);
+    }
+
+    // --- withdraw ---
+
+    function test_WithdrawLeavesFullBuyBackLiability() public {
+        for (uint256 i; i < 30; ++i) {
+            _buy();
+        }
+        uint256 owed = drop.liability();
+        assertEq(drop.withdrawable(), address(drop).balance - owed);
+
+        vm.prank(maker);
+        drop.withdraw();
+
+        assertEq(address(drop).balance, owed);
+        assertEq(drop.withdrawable(), 0);
+        _assertInvariants();
+
+        // Every outstanding unit is still sellable back after the maker took its cut.
+        while (holders.length > 0) {
+            _sellBackAt(holders.length - 1);
+            _assertInvariants();
+        }
+    }
+
+    function test_WithdrawTakesEverythingAfterSaleEnd() public {
+        for (uint256 i; i < 30; ++i) {
+            _buy();
+        }
+        uint256 total = address(drop).balance;
+        vm.warp(saleEnd);
+        vm.prank(maker);
+        drop.withdraw();
+        assertEq(address(drop).balance, 0);
+        assertEq(maker.balance, total);
+    }
+
+    function test_WithdrawOnlyMaker() public {
+        _buy();
+        vm.expectRevert(Drop.NotMaker.selector);
+        drop.withdraw();
+    }
+
+    function test_WithdrawRevertsWhenNothingFree() public {
+        _buy();
+        vm.prank(maker);
+        drop.withdraw();
+        vm.prank(maker);
+        vm.expectRevert(Drop.NothingToWithdraw.selector);
+        drop.withdraw();
+    }
+
+    // --- redeem ---
+
+    function test_RedeemAfterSaleEndBurnsUnit() public {
+        (address buyer, uint256 tokenId) = _buy();
+        vm.warp(saleEnd);
+        vm.prank(buyer);
+        drop.redeem(tokenId);
+        vm.expectRevert();
+        drop.ownerOf(tokenId);
+    }
+
+    function test_RedeemBlockedWhileSaleOpen() public {
+        (address buyer, uint256 tokenId) = _buy();
+        vm.prank(buyer);
+        vm.expectRevert(Drop.SaleStillOpen.selector);
+        drop.redeem(tokenId);
     }
 
     // --- config ---

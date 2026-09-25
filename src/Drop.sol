@@ -13,6 +13,10 @@ import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 ///         One unit per verified human: the backend verifies a World ID proof and signs an
 ///         EIP-712 voucher carrying the nullifier, which this contract also records so the limit
 ///         does not rest on the backend alone.
+///
+///         Holders can sell back at the current curve price minus `spreadBps`, which burns the
+///         unit and lowers the price for the next buyer. The spread sits below Mercari's ~10%
+///         seller fee, so selling back beats reselling.
 contract Drop is ERC721, EIP712 {
     struct Config {
         address maker;
@@ -62,6 +66,9 @@ contract Drop is ERC721, EIP712 {
     mapping(uint256 nullifierHash => bool used) public nullifierUsed;
 
     event Bought(uint256 indexed tokenId, address indexed buyer, uint256 price, uint256 nullifierHash);
+    event SoldBack(uint256 indexed tokenId, address indexed seller, uint256 payout);
+    event Redeemed(uint256 indexed tokenId, address indexed owner);
+    event Withdrawn(address indexed to, uint256 amount);
 
     error BadConfig();
     error SaleClosed();
@@ -72,6 +79,10 @@ contract Drop is ERC721, EIP712 {
     error AlreadyPurchased();
     error BadSignature();
     error Underpaid();
+    error SaleStillOpen();
+    error NotOwner();
+    error NotMaker();
+    error NothingToWithdraw();
     error TransferFailed();
 
     constructor(string memory name_, string memory symbol_, Config memory c)
@@ -110,6 +121,10 @@ contract Drop is ERC721, EIP712 {
         return price(sold);
     }
 
+    function currentSellBackPrice() external view returns (uint256) {
+        return sold == 0 ? 0 : _payoutFor(sold - 1);
+    }
+
     function unitsLeft() external view returns (uint256) {
         return supply - sold;
     }
@@ -124,6 +139,17 @@ contract Drop is ERC721, EIP712 {
         for (uint256 i; i < supply; ++i) {
             prices[i] = price(i);
         }
+    }
+
+    /// @notice What the contract owes if every outstanding unit were sold back right now.
+    /// @dev Flooring the sum over-reserves versus flooring each payout, so this is never short.
+    function liability() public view returns (uint256) {
+        return curveSum * (BPS - spreadBps) / BPS;
+    }
+
+    function _payoutFor(uint256 i) internal view returns (uint256) {
+        // Rounds down, in the contract's favour (SPEC §6.1 rounding invariant).
+        return price(i) * (BPS - spreadBps) / BPS;
     }
 
     // --- core ---
@@ -154,9 +180,59 @@ contract Drop is ERC721, EIP712 {
         if (msg.value > p) _send(msg.sender, msg.value - p);
     }
 
-    // --- Phase 2 (ENS subnames) hooks in here without touching buy ---
+    /// @notice Sell a unit back to the drop at the top curve price minus the spread.
+    function sellBack(uint256 tokenId) external {
+        if (block.timestamp >= saleEnd) revert SaleClosed();
+        if (ownerOf(tokenId) != msg.sender) revert NotOwner();
+
+        _beforeBurn(tokenId);
+        _burn(tokenId);
+
+        sold -= 1;
+        uint256 p = price(sold); // the position just vacated
+        curveSum -= p;
+        uint256 payout = p * (BPS - spreadBps) / BPS;
+
+        emit SoldBack(tokenId, msg.sender, payout);
+        _send(msg.sender, payout);
+    }
+
+    /// @notice Burn a unit after the sale closes, to claim the physical item.
+    function redeem(uint256 tokenId) external {
+        if (block.timestamp < saleEnd) revert SaleStillOpen();
+        if (ownerOf(tokenId) != msg.sender) revert NotOwner();
+
+        _beforeBurn(tokenId);
+        _burn(tokenId);
+        // `sold` is deliberately left alone: the unit was fulfilled, not returned to the drop.
+        emit Redeemed(tokenId, msg.sender);
+    }
+
+    /// @notice While the sale is open the maker can only take what is above the buy-back
+    ///         liability, so a sell-back cascade can never find the contract short (SPEC §6.4).
+    function withdraw() external {
+        if (msg.sender != maker) revert NotMaker();
+
+        uint256 balance = address(this).balance;
+        uint256 amount = block.timestamp >= saleEnd ? balance : balance - liability();
+        if (amount == 0) revert NothingToWithdraw();
+
+        emit Withdrawn(maker, amount);
+        _send(maker, amount);
+    }
+
+    function withdrawable() external view returns (uint256) {
+        uint256 balance = address(this).balance;
+        if (block.timestamp >= saleEnd) return balance;
+        uint256 owed = liability();
+        return balance > owed ? balance - owed : 0;
+    }
+
+    // --- Phase 2 (ENS subnames) hooks in here without touching buy/sellBack ---
 
     function _afterMint(uint256 tokenId, address to) internal virtual {}
+
+    function _beforeBurn(uint256 tokenId) internal virtual {}
 
     // --- internals ---
 
