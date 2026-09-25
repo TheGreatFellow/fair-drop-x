@@ -375,6 +375,9 @@ export default function DropPage() {
 
       {rpContext && address && (
         <IDKitRequestWidget
+          // A new widget per attempt: each signed request's nonce is single-use, and a reused
+          // widget can replay the previous request (World: duplicate_nonce → "Verification unavailable").
+          key={rpContext.nonce}
           open={widgetOpen}
           onOpenChange={setWidgetOpen}
           app_id={APP_ID}
@@ -386,7 +389,7 @@ export default function DropPage() {
           handleVerify={handleVerify}
           onSuccess={() => void buy()}
           onError={(code) =>
-            setNotice((n) => n ?? { tone: "bad", text: `Verification was cancelled or failed (${String(code)}).` })
+            setNotice((n) => n ?? { tone: "bad", text: `Verification was cancelled or failed (World ID code: ${String(code)}).` })
           }
         />
       )}
