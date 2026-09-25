@@ -6,7 +6,6 @@ type Props = {
   prices: number[]; // yen, index i = price of the (i+1)th sale
   sold: number; // next unit to sell is index `sold`
   flatUnits: number;
-  mercari: number; // yen, the static comparison line
 };
 
 const W = 520;
@@ -16,15 +15,14 @@ const FONT = 12;
 const yen = (n: number) => `¥${Math.round(n).toLocaleString("ja-JP")}`;
 
 /**
- * The project's whole argument in one picture: a flat fan price, then demand pricing that stays
- * under the Mercari resale line. One data series, so no legend box — the title names it and the
- * reference line is labelled directly.
+ * The project's whole argument in one picture: a flat fan price, then demand pricing. One data
+ * series, so no legend box — the title names it.
  */
-export function PriceChart({ prices, sold, flatUnits, mercari }: Props) {
+export function PriceChart({ prices, sold, flatUnits }: Props) {
   const [hover, setHover] = useState<number | null>(null);
   const n = prices.length;
   // Round tick steps (¥5k / ¥10k …) instead of quarters of an arbitrary max.
-  const top = Math.max(mercari, ...prices) * 1.1;
+  const top = Math.max(...prices) * 1.1;
   const tickStep = [1000, 2000, 5000, 10000, 20000, 50000].find((t) => top / t <= 5) ?? 100000;
   const yMax = Math.ceil(top / tickStep) * tickStep;
   const x = (i: number) => PAD.left + ((i + 0.5) / n) * (W - PAD.left - PAD.right);
@@ -38,7 +36,7 @@ export function PriceChart({ prices, sold, flatUnits, mercari }: Props) {
   return (
     <figure className="viz-root m-0">
       <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-auto" role="img"
-        aria-label={`Price per unit. First ${flatUnits} at ${yen(prices[0])}, rising to ${yen(prices[n - 1])}; typical Mercari resale ${yen(mercari)}.`}>
+        aria-label={`Price per unit. First ${flatUnits} at ${yen(prices[0])}, rising to ${yen(prices[n - 1])}.`}>
         {ticks.map((t) => (
           <g key={t}>
             <line x1={PAD.left} x2={W - PAD.right} y1={y(t)} y2={y(t)} stroke="var(--grid)" strokeWidth={1} />
@@ -51,12 +49,6 @@ export function PriceChart({ prices, sold, flatUnits, mercari }: Props) {
           <text key={i} x={x(i)} y={H - PAD.bottom + 18} textAnchor="middle" fontSize={FONT} fill="var(--muted)">#{i + 1}</text>
         ))}
         <text x={(PAD.left + W - PAD.right) / 2} y={H - 4} textAnchor="middle" fontSize={FONT} fill="var(--muted)">Unit number (order of sale)</text>
-
-        {/* Reference, not a series: muted ink, dashed, labelled in place. */}
-        <line x1={PAD.left} x2={W - PAD.right} y1={y(mercari)} y2={y(mercari)} stroke="var(--muted)" strokeWidth={1.5} strokeDasharray="6 5" />
-        <text x={W - PAD.right} y={y(mercari) - 8} textAnchor="end" fontSize={FONT + 1} fill="var(--text-secondary)">
-          Typical Mercari resale {yen(mercari)}
-        </text>
 
         {/* Units already sold sit under a soft band; the unsold rest of the curve stays open. */}
         {sold > 0 && (
@@ -84,7 +76,6 @@ export function PriceChart({ prices, sold, flatUnits, mercari }: Props) {
       <figcaption className="mt-1 text-sm" style={{ color: "var(--text-secondary)", fontVariantNumeric: "tabular-nums" }}>
         Unit #{shown + 1}: <strong style={{ color: "var(--text-primary)" }}>{yen(prices[shown])}</strong>
         {shown < sold ? " · sold" : shown === next ? " · next to sell" : ""}
-        {" · "}{(prices[shown] / mercari * 100).toFixed(0)}% of the Mercari price
       </figcaption>
     </figure>
   );

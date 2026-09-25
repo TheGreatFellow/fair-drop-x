@@ -21,8 +21,6 @@ import { PriceChart } from "./price-chart";
 // Sepolia prices are tiny, so yen is shown at a fixed demo scale where the base price reads as
 // ¥3,000 — the worked example in SPEC §6.4. Labelled as such on the page.
 const YEN_FOR_BASE_PRICE = 3000;
-// SPEC §1: limited merch resells on Mercari at 10–20x. The chart uses the conservative end.
-const MERCARI_MULTIPLE = 10;
 
 const APP_ID = process.env.NEXT_PUBLIC_WORLD_APP_ID as `app_${string}`;
 const ACTION = process.env.NEXT_PUBLIC_WORLD_ACTION as string;
@@ -150,7 +148,6 @@ export default function DropPage() {
   const saleOpen = now / 1000 < Number(saleEnd);
   const soldOut = soldN >= Number(supply);
   const wrongChain = isConnected && chainId !== sepolia.id;
-  const mercari = YEN_FOR_BASE_PRICE * MERCARI_MULTIPLE;
 
   async function send(label: string, run: () => Promise<Hex>): Promise<boolean> {
     setBusy(label);
@@ -384,9 +381,9 @@ export default function DropPage() {
           <p className="mb-3 text-sm" style={{ color: "var(--text-secondary)" }}>
             Early fans pay the normal price. After that, demand sets it — and the markup goes to the maker, not to scalpers.
           </p>
-          <PriceChart prices={curve.map(toYen)} sold={soldN} flatUnits={Number(flatUnits)} mercari={mercari} />
+          <PriceChart prices={curve.map(toYen)} sold={soldN} flatUnits={Number(flatUnits)} />
           <p className="mt-3 text-xs" style={{ color: "var(--muted)" }}>
-            Yen at demo scale: {eth(basePrice)} is shown as {yen(YEN_FOR_BASE_PRICE)}. Mercari line is {MERCARI_MULTIPLE}× the fan price.
+            Yen at demo scale: {eth(basePrice)} is shown as {yen(YEN_FOR_BASE_PRICE)}.
           </p>
         </section>
       </div>
@@ -404,7 +401,7 @@ export default function DropPage() {
                     <div className="font-medium">Unit #{id.toString()}</div>
                     {saleOpen && (
                       <div className="text-sm" style={{ color: "var(--text-secondary)", fontVariantNumeric: "tabular-nums" }}>
-                        Sell back now for {yen(toYen(sellBackPrice))} — you keep 95%. Mercari takes 10% plus shipping.
+                        Sell back now for {yen(toYen(sellBackPrice))} — 95% of the current price, paid instantly.
                       </div>
                     )}
                   </div>

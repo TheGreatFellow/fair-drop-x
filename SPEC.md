@@ -141,7 +141,6 @@ Next.js + wagmi/viem. One drop page:
 - item card, current price, units left
 - phase badge: **"Fan price — X of Y left at ¥___"** during the flat phase, then **"Demand pricing"**
 - **live price chart**: flat line for the first X units, then the rising curve, with a marker at the current position
-- a static comparison line: "typical Mercari resale price" (the visual point of the project)
 - Verify with World ID → Buy
 - My units → Sell back (shows payout) / Redeem (after close)
 - clear rejection states: "already purchased" (same human again), "verification failed/cancelled"
@@ -272,8 +271,8 @@ For the demo, deploy with a small `flatUnits` (e.g. 2–3) so the curve kicks in
 2. Judge verifies with World ID and buys at the fan price.
 3. Fan-price units run out → badge switches to "Demand pricing"; next judge buys and the price ticks up on the chart.
 4. First judge tries to buy again → **rejected** (World's required alternative path).
-5. Someone sells back → price drops, payout shown vs. Mercari fee.
-6. Close: curve vs. Mercari line — the gap is the money that now goes to the maker.
+5. Someone sells back → price drops, payout shown.
+6. Close: the curve — every yen above the fan price now goes to the maker, not a scalper.
 
 ## 10. ETHGlobal rules to respect
 - Start from scratch (Classic track). No prior project code.
