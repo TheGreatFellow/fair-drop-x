@@ -1,0 +1,9 @@
+{
+  "name": "fair-drop-backend",
+  "private": true,
+  "type": "module",
+  "version": "0.1.0",
+  "dependencies": {
+    "@worldcoin/idkit-server": "^1.1.1"
+  }
+}
