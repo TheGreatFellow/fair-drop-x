@@ -29,24 +29,31 @@ Each phase must be fully working, committed and demo-able before starting the ne
 | Phase | Scope | Prize target | Target done by |
 |---|---|---|---|
 | **1. Core + World** | Contract (flat price → curve, buy, sell-back, withdraw), World ID verification backend, drop page | World — Best Use of IDKit ($7,500) | Sat afternoon |
-| **2. Uniswap (only if Phase 1 is fully done)** | One of two routes, by time remaining: **A** pay with any token via the Trading API, or **B** Vickrey auction as a v4 hook | Uniswap — Best Stack Contribution ($6,000, 3 places) | Sun early morning, or skip |
+| **2. Auction drop on Uniswap v4** | Multi-unit sealed-bid (uniform-price Vickrey) drop with a 定価 fan raffle, built as a v4 hook (§8.2) | Uniswap — Best Stack Contribution ($6,000, 3 places) | Sun early morning |
 
 **Phase 1 is the submission.** Phase 2 is started only once the contract, the World ID backend
 and the frontend all work end to end, and only if that happens with hours to spare. A polished
 Phase 1 beats a broken Phase 2 — one finished integration beats two half-built ones.
 
-Phase 2 has two routes to the same prize (§8). Route A is a few hours and shallow; Route B is the
-ambitious one and is a **stretch goal only**. Whichever is attempted, it is additive: it must not
-modify `Drop.sol` or the Phase 1 demo.
+**Phase 1 is done** (2026-09-26 01:43: contract, World ID backend and drop page working end to end
+on Sepolia, live at fair-drop-sable.vercel.app). Phase 2 is the auction drop (§8.2), decided
+2026-09-26 03:00: it replaces the curve as the headline mechanism, because it measures the market
+price instead of guessing it with a slope. It is still **additive**: a new contract on a feature
+branch; `Drop.sol` and the curve demo stay deployed and untouched as the fallback. If the auction
+isn't deployed and passing its tests two hours before submission, submit Phase 1.
 
 ## 5. Explicitly out of scope (decided, do not build)
 
 - Demand-triggered production runs (items are fixed limited editions).
 - Same-human-only redemption, transfer locks, claim restrictions.
-- Uniform clearing-price auction.
-- Uniswap v4 custom-curve hook **for the main drop** — i.e. replacing `price(i)` with an AMM curve.
-  Too risky solo, and it would discard the flat fan price. (A v4 hook for a *separate* Vickrey
-  auction drop is in scope as a stretch goal — see §8.2.)
+- ~~Uniform clearing-price auction.~~ **Reopened 2026-09-26** as the Phase 2 mechanism (§8.2). Why the
+  original objection no longer holds: (1) World ID gives every bidder unit demand, which removes the
+  classic flaw of uniform-price auctions — large buyers shading bids ("demand reduction") — and makes
+  the uniform (highest-losing-bid) price the multi-unit Vickrey price, where bidding your true value
+  is optimal; (2) a reserve of 定価 means fans pay the normal price whenever demand is low; (3) a
+  定価 fan raffle keeps access for fans who can't outbid the richest buyers.
+- Uniswap v4 custom-curve hook **for the main drop** — i.e. replacing `price(i)` in `Drop.sol` with an
+  AMM curve. (Phase 2's auction drop is a separate v4 hook contract — see §8.)
 - **ENSv2 subnames (descoped 2026-09-25).** Giving each unit a subname like `042.drop.maker.eth`
   is decoration: the NFT stays the source of truth and nothing reads the name, which fails ENS's
   "central, not cosmetic" bar. The one genuinely non-cosmetic angle is that this drop's units
@@ -54,10 +61,8 @@ modify `Drop.sol` or the Phase 1 demo.
   real Permissioned Registry lifecycle work most projects never exercise. Not worth the risk of a
   Sepolia beta API against a $6,000 prize split three ways while Phase 1 is unfinished. The
   `_afterMint` / `_beforeBurn` hooks are already deployed, so this stays cheap to revisit.
-- **Replacing the flat-then-curve mechanism with an auction.** An auction makes fans pay their full
-  willingness to pay, which is the scalper outcome this project exists to prevent, and it discards
-  the fixed fan price that distinguishes us from Unisocks. A Vickrey auction as an *additional,
-  separate* drop type is a stretch goal (§8.2); swapping out the Phase 1 mechanism is not.
+- **Pay-as-bid auctions** (each winner pays their own bid). Fans would have to guess others' bids and
+  shade their own; the uniform price in §8.2 makes honest bidding optimal instead.
 
 ---
 
@@ -200,79 +205,104 @@ rather than cosmetic. The deployed `_afterMint` / `_beforeBurn` hooks keep it re
 cost, and if it is ever revisited the angle worth building is name revocation on sell-back with
 expiry tied to the redemption deadline — lifecycle work, not naming.
 
-## 8. Phase 2 — Uniswap (only if Phase 1 is fully done, with hours to spare)
+## 8. Phase 2 — Auction drop on Uniswap v4
 
-Two routes to the same prize. Pick by how much time is actually left, and in both cases the work
-is **additive**: `Drop.sol`, its 34 tests and the Phase 1 demo must not change.
+### 8.1 Why an auction replaces the curve
 
-Shared requirements for either route: public repo, **`FEEDBACK.md`**, completed Uniswap Developer
-Feedback Form linking to it, README pointing to the exact contracts/lines of the integration.
+Scalping exists because of a gap: 定価 sits below the market price, and the scalper pockets the
+difference. The Phase 1 curve captures that gap for the maker by *guessing* the market price with a
+slope the maker picks. A sealed-bid auction captures it by *measuring* the market price directly —
+same thesis, better instrument. The story becomes: fan units at 定価 (the culture) → the rest priced
+by sealed bids (the gap goes to the maker) → sell-back at the clearing price (resale has no edge) →
+one per human throughout.
 
-### 8.1 Route A — pay with any token (Trading API)
+### 8.2 Mechanism
 
-Buyers holding another token get it swapped to the drop's payment currency via the Uniswap Trading
-API, then `buy()` runs. A few hours of work, and shallow by the Uniswap team's own assessment.
+One sealed-bid round for a drop of N units, of which X are fan units.
 
-What was checked at the event (2026-09-25):
+1. **Bid.** Each verified human submits one sealed bid — a commitment `hash(bid, secret, bidder)`
+   plus a deposit ≥ bid, so the deposit hides the bid. One bid per World ID nullifier. The secret is
+   random and kept in the browser; losing it means the bid can't be revealed (accepted for the
+   hackathon).
+2. **Close bidding** — from the admin console, not a timer, so the demo controls the pace. Closing
+   early gives the maker no edge: bids are sealed.
+3. **Reveal.** Bidders open their bids. The reveal phase stays open a **minimum time** (default 2
+   minutes) before the admin may settle, so bidders can't be cut off.
+4. **Settle.**
+   - **Fan raffle first:** X units at 定価, drawn at random among revealed bids ≥ 定価.
+   - **Then the auction:** the remaining N − X units go to the highest remaining bids. Every winner
+     pays the same price — the highest losing bid, or 定価 if there are fewer bids than units.
+   - Raffle-first is deliberate: the bid doesn't affect raffle odds, so bidding your true value stays
+     optimal. Raffling among auction losers instead would reward bidding low on purpose.
+   - Unrevealed bids forfeit their deposit.
+5. **Withdraw.** Pull-based: losers get their deposit back, winners get deposit minus price.
+6. **Sell-back.** After settlement, a holder can return a unit for the clearing price minus the
+   spread (default 5%). The contract keeps enough to buy back every unit until the sale closes — the
+   same solvency rule as Phase 1 (§6.4). A seller can never bid again.
 
-- **Sepolia is supported.** Chain ID 11155111 is listed, and the docs say all listed testnets are
-  reachable through the API. The warning in `REFERENCES.md` that it might not support Sepolia is
-  wrong.
-- **The API key is free and self-serve**, rate-limited to 6 requests/second. No approval queue.
-- **Liquidity is the open risk, not access.** No Uniswap v3 pool exists on Sepolia for WETH/USDC
-  or WETH/UNI at any fee tier. The Trading API also routes v2, v4 and UniswapX, which was not
-  checked. Before building anything: get a key and request one quote. If no route comes back, the
-  integration demos as a failing swap, which is worse than not integrating at all.
-- **The Uniswap team's own read is that this is shallow** — similar to any bonding-curve project.
-  Ask how much of "Best Stack Contribution" is scored on `FEEDBACK.md` and the feedback form
-  versus integration depth; if feedback carries real weight, a thin integration plus honest
-  feedback may still place.
+Knobs: N, X, 定価 (reserve), spread, optional price cap (if demand at the cap exceeds the remaining
+units, those at the cap are raffled).
 
-### 8.2 Route B — Vickrey auction as a Uniswap v4 hook (stretch goal)
+### 8.3 Why World ID is central here
 
-Suggested by the Uniswap team as the genuinely deep integration. A **second, separate** drop type:
-a sealed-bid second-price auction for a limited edition, implemented as a v4 hook, sitting
-alongside the flat-then-curve `Drop.sol` rather than replacing it. Same World ID one-per-human
-gate, so the anti-scalping thesis still holds — it becomes "one bid per human" instead of
-"one purchase per human".
+With one bid per human, every bidder wants at most one unit. For that case the uniform
+highest-losing-bid price *is* the multi-unit Vickrey price, and bidding your true value is the best
+strategy. The known weakness of uniform-price auctions — a buyer wanting many units bids low to pull
+the price down on all of them — cannot happen. **World ID is what makes a multi-unit auction
+honest.**
 
-**Sketch.** Bidders commit `keccak256(amount, salt, bidder)` during a bidding window, reveal
-after it closes, and the top bidder pays the second-highest price. The hook's job is to make the
-pool respect the auction: `beforeSwap` rejects ordinary swaps while bidding or revealing is open,
-so the pool cannot be traded around the auction, and settlement happens at the clearing price once
-revealed.
+### 8.4 How it lives on Uniswap v4
 
-**Known hard parts — read before starting, these are why it is a stretch:**
+- **A bid is a swap.** Bidders swap ETH into the auction pool (Universal Router → PoolManager). The
+  hook's `beforeSwap` takes the whole input and returns nothing yet — OpenZeppelin's `BaseAsyncSwap`
+  pattern — recording the deposit and the commitment passed in `hookData`, and checking the World ID
+  voucher there.
+- Permissions: `beforeSwap` with return delta (async bid), `beforeAddLiquidity` (no outside
+  liquidity), `beforeInitialize` (bound to one pool). Hook address mined with HookMiner.
+- Settlement and refunds run through the PoolManager's `unlockCallback` (deposits are held as
+  ERC-6909 claims); the MEV-auction hook is the reference for escrow + pull refunds.
+- Because bids are swaps, the Universal Router can route any token → ETH → bid in one transaction:
+  pay-with-any-token comes for free, subject to Sepolia liquidity.
+- Sepolia: PoolManager `0xE03A1074c86CFeDd5C142C4F04F1a1536e203543`, Universal Router
+  `0x3A9D48AB9751398BbFa63ad67599Bb04e4BdF98b` (both verified to have code).
 
-1. **Sealed bids fight the AMM.** v4 swaps are public and atomic; sealed bidding needs bids hidden
-   until reveal. Commit–reveal is the only realistic route solo, which means two transactions per
-   bidder plus a reveal window, and a bidder who never reveals needs a forfeited deposit.
-2. **It cannot be demoed live in 4 minutes.** A bid window plus a reveal window does not fit the
-   §9 script. Plan on pre-seeded bids with the reveal shown live, or a recorded segment. Decide
-   this *before* building, not after.
-3. **Hook plumbing is the real cost, not the auction.** Correct `beforeSwap` return values, hook
-   permission flags in the address, and pool initialisation against the Sepolia v4 PoolManager are
-   where solo attempts stall. Budget for the plumbing, not the economics.
-4. **Keep it away from the reserve.** The Phase 1 solvency invariant (§6.4) holds because the
-   reserve only ever moves along `price(i)`. The auction contract must hold its own funds; it must
-   never touch `Drop.sol`'s balance.
-5. **Abandonment plan.** If the hook is not deployed and passing tests with two hours left before
-   submission, drop it and submit Phase 1. Committed-but-broken stretch code in the repo is worse
-   than no stretch code, so keep it on a branch until it works.
+### 8.5 Build rules
 
-**Tests required before it counts as working:** highest bidder wins and pays the second price;
-a single bidder pays their own bid or a reserve price; unrevealed bids forfeit; no ordinary swap
-can execute while the auction is open; one bid per World ID nullifier.
+- Branch `feat/auction-hook` from `main`; merged only once it passes its tests. Vercel builds only
+  `main` to production; branch pushes get preview URLs without secrets.
+- Reuse the World ID backend and voucher signing from Phase 1.
+- Tests required before it counts as working: uniform price = highest losing bid; fewer bids than
+  units → everyone pays 定価; raffle only among bids ≥ 定価 and doesn't change auction outcomes;
+  one bid per nullifier; unrevealed deposits forfeit; admin can't settle before the minimum reveal
+  time; ordinary swaps blocked; refunds exact; sell-back solvency holds.
+- Demo with multiple bidders: pending World's answer on multiple simulator identities (asked
+  2026-09-26 morning); fallback is test mode for the extra bidders.
+
+### 8.6 Future enhancements (not for this hackathon)
+
+- **World ID validation hook for Uniswap's CCA** — CCA's official `IValidationHook` slot gating bids
+  to one per human.
+- **Resale on Uniswap after settlement** — the hook opens the pool as the resale market at the
+  clearing price, with hook fees paying the maker on every resale: "we don't ban resale, we host it."
+- Route A (Trading API pay-with-any-token) as a standalone feature, if the Universal Router path
+  above doesn't cover it.
+
+Research still to do: tie-breaking at the clearing price; how CCA's design avoids timing games; how
+fans reacted to real ticketing auctions and dynamic pricing.
 
 ## 9. Demo script (4 min + 3 min Q&A)
 
 For the demo, deploy with a small `flatUnits` (e.g. 2–3) so the curve kicks in live.
 1. Problem in 20s: limited merch → sells out → Mercari at 10–20x.
-2. Judge verifies with World ID and buys at the fan price.
-3. Fan-price units run out → badge switches to "Demand pricing"; next judge buys and the price ticks up on the chart.
-4. First judge tries to buy again → **rejected** (World's required alternative path).
-5. Someone sells back → price drops, payout shown.
-6. Close: the curve — every yen above the fan price now goes to the maker, not a scalper.
+2. Judges verify with World ID and place sealed bids; nobody can see the amounts.
+3. Same judge tries to bid again → **rejected** (World's required alternative path).
+4. Admin closes bidding → judges reveal → settle: fan units raffled at 定価, the rest clear at one
+   price — the highest losing bid — shown on screen.
+5. A winner sells back at the clearing price minus the spread.
+6. Close: the gap scalpers used to take is on screen, and it goes to the maker.
+
+Fallback if the auction isn't ready: the Phase 1 curve demo (fan price → demand pricing → rejection
+→ sell-back), which is live and tested.
 
 ## 10. ETHGlobal rules to respect
 - Start from scratch (Classic track). No prior project code.
@@ -288,8 +318,6 @@ For the demo, deploy with a small `flatUnits` (e.g. 2–3) so the curve kicks in
 
 ## 12. Build order
 1. **Phase 1:** contract + tests (flat price → curve, buy with voucher, sell-back, withdraw, solvency + maker-never-loses fuzz, cascade tests) → deploy to Sepolia → IDKit backend + voucher → frontend → World debrief. Commit.
-2. **Phase 2 (only if Phase 1 is fully working with hours to spare):** pick a route by time left.
-   Route A — check Sepolia liquidity with one Trading API quote, then pay-with-any-token.
-   Route B (stretch) — Vickrey auction v4 hook on a branch, merged only once it passes §8.2's
-   tests. Either way: FEEDBACK.md + feedback form. Commit.
+2. **Phase 2:** auction drop hook on `feat/auction-hook` (§8) → tests → deploy to Sepolia →
+   auction tab in the web app → merge. FEEDBACK.md + Uniswap feedback form. Commit.
 4. Final: README, demo video, AI attribution, submit with buffer before 09:00 JST Sunday.
