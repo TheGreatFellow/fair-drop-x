@@ -73,8 +73,6 @@ function txMessage(e: unknown): string {
           return "The reveal window is still open. Wait for the countdown.";
         case "WrongPhase":
           return "The auction has moved to a different phase. Refreshing.";
-        case "SaleClosed":
-          return "Sell-back has closed.";
         default:
           return `Transaction failed: ${revert.data?.errorName ?? revert.shortMessage}`;
       }
@@ -86,7 +84,11 @@ function txMessage(e: unknown): string {
 }
 
 export default function AuctionPage() {
-  const { address, chainId, isConnected } = useConnection();
+  const { address: selected, addresses, chainId, isConnected, connector } = useConnection();
+  // Demo convenience: with several accounts connected, pick which one acts. Every write passes it
+  // as `account`, so the wallet signs as that account without switching in the extension.
+  const [picked, setPicked] = useState<Address | null>(null);
+  const address = picked && addresses?.some((a) => a.toLowerCase() === picked.toLowerCase()) ? picked : selected;
   const connectors = useConnectors();
   const connect = useConnect();
   const disconnect = useDisconnect();
@@ -101,20 +103,18 @@ export default function AuctionPage() {
       { ...auction, functionName: "supply" },
       { ...auction, functionName: "fanUnits" },
       { ...auction, functionName: "reservePrice" },
-      { ...auction, functionName: "spreadBps" },
       { ...auction, functionName: "minRevealTime" },
       { ...auction, functionName: "revealStart" },
-      { ...auction, functionName: "saleEnd" },
       { ...auction, functionName: "clearingPrice" },
       { ...auction, functionName: "fanWinners" },
       { ...auction, functionName: "auctionWinners" },
       { ...auction, functionName: "biddersCount" },
-      { ...auction, functionName: "withdrawable" },
+      { ...auction, functionName: "makerFunds" },
     ],
     allowFailure: false,
     query: { refetchInterval: 4000 },
   });
-  const count = data?.[12];
+  const count = data?.[10];
   const phaseN = data?.[1];
 
   // Every bid, re-read whenever the bid count or phase moves (and on the 4s poll).
@@ -186,17 +186,15 @@ export default function AuctionPage() {
     return <main className="mx-auto max-w-5xl p-8 text-sm" style={{ color: "var(--muted)" }}>Loading the auction…</main>;
   }
 
-  const [maker, , supply, fanUnits, reserve, spreadBps, minReveal, revealStart, saleEnd, clearing, fanWinners, auctionWinners, , withdrawable] = data;
+  const [maker, , supply, fanUnits, reserve, minReveal, revealStart, clearing, fanWinners, auctionWinners, , makerFunds] = data;
   const phase = PHASES[phaseN!];
   const toYen = (wei: bigint) => (Number(wei) * YEN_FOR_RESERVE) / Number(reserve);
   const fromYen = (y: number) => (BigInt(Math.round(y)) * reserve) / BigInt(YEN_FOR_RESERVE);
-  const payout = (wei: bigint) => (wei * (10_000n - spreadBps)) / 10_000n;
   const isMaker = !!address && address.toLowerCase() === maker.toLowerCase();
   const wrongChain = isConnected && chainId !== sepolia.id;
   const mine = rows.find((r) => address && r.bidder.toLowerCase() === address.toLowerCase());
   const settleAt = Number(revealStart + minReveal) * 1000;
   const settleIn = Math.max(0, Math.ceil((settleAt - now) / 1000));
-  const saleOpen = now / 1000 < Number(saleEnd);
 
   // Deposit defaults to the next ¥10,000 step strictly above the bid, so it never equals the bid.
   const bidNum = Number(bidYen);
@@ -292,7 +290,7 @@ export default function AuctionPage() {
       deposit,
     );
     const ok = await send("Confirm the sealed bid in your wallet…", () =>
-      write.mutateAsync({ address: UNIVERSAL_ROUTER, abi: universalRouterAbi, functionName: "execute", chainId: sepolia.id, ...call }),
+      write.mutateAsync({ address: UNIVERSAL_ROUTER, abi: universalRouterAbi, functionName: "execute", chainId: sepolia.id, account: address, ...call }),
     );
     await refetchSaved();
     if (ok) {
@@ -306,26 +304,35 @@ export default function AuctionPage() {
     const s = loadSaved(address!);
     if (!s) return;
     if (await send("Confirm the reveal in your wallet…", () =>
-      write.mutateAsync({ ...auction, functionName: "reveal", chainId: sepolia.id, args: [BigInt(s.amount), s.secret] }))) {
+      write.mutateAsync({ ...auction, functionName: "reveal", chainId: sepolia.id, account: address, args: [BigInt(s.amount), s.secret] }))) {
       setNotice({ tone: "good", text: `Revealed your bid of ${yen(toYen(BigInt(s.amount)))}.` });
     }
   }
 
   async function claim() {
-    if (await send("Confirm in your wallet…", () => write.mutateAsync({ ...auction, functionName: "claim", chainId: sepolia.id }))) {
+    if (await send("Confirm in your wallet…", () => write.mutateAsync({ ...auction, functionName: "claim", chainId: sepolia.id, account: address }))) {
       setNotice({ tone: "good", text: mine?.outcome ? "Claimed: your unit is below, and the rest of your deposit is back in your wallet." : "Your deposit is back in your wallet." });
     }
   }
 
-  async function sellBack(id: bigint, paid: bigint) {
-    if (await send("Confirm the sell-back in your wallet…", () =>
-      write.mutateAsync({ ...auction, functionName: "sellBack", chainId: sepolia.id, args: [id] }))) {
-      setNotice({ tone: "good", text: `Sold back unit #${id} for ${yen(toYen(payout(paid)))}.` });
-    }
+  // Asks the wallet to connect more of its accounts to the site; they then appear in the picker.
+  async function addWallet() {
+    const provider = (await connector?.getProvider()) as { request(a: { method: string; params?: unknown[] }): Promise<unknown> } | undefined;
+    await provider?.request({ method: "wallet_requestPermissions", params: [{ eth_accounts: {} }] }).catch(() => {});
+  }
+
+  function pickWallet(a: Address) {
+    // A voucher and a half-filled bid belong to the previous wallet.
+    signedRef.current = null;
+    setPending(null);
+    setNotice(null);
+    setBidYen("");
+    setDepositYen("");
+    setPicked(a);
   }
 
   const makerCall = (functionName: "closeBidding" | "settle" | "withdraw", label: string) =>
-    void send(label, () => write.mutateAsync({ ...auction, functionName, chainId: sepolia.id }));
+    void send(label, () => write.mutateAsync({ ...auction, functionName, chainId: sepolia.id, account: address }));
 
   const card = "rounded-2xl p-6";
   const cardStyle = { background: "var(--surface-1)", border: "1px solid var(--border)" };
@@ -436,10 +443,22 @@ export default function AuctionPage() {
             </label>
           )}
           {isConnected && address && (
-            <button className="rounded-full px-3 py-1.5 text-sm" style={{ border: "1px solid var(--border)", color: "var(--text-secondary)" }}
-              onClick={() => disconnect.mutate({})}>
-              {short(address)} · Disconnect
-            </button>
+            <div className="flex items-center gap-2 text-sm">
+              <select aria-label="Acting wallet" value={address} onChange={(e) => pickWallet(e.target.value as Address)}
+                className="rounded-full px-3 py-1.5" style={{ border: "1px solid var(--border)", color: "var(--text-primary)", background: "var(--surface-1)" }}>
+                {(addresses ?? [address]).map((a) => (
+                  <option key={a} value={a}>{short(a)}{a.toLowerCase() === maker.toLowerCase() ? " · maker" : ""}</option>
+                ))}
+              </select>
+              <button className="rounded-full px-3 py-1.5" style={{ border: "1px solid var(--border)", color: "var(--text-secondary)" }}
+                onClick={() => void addWallet()} title="Connect more accounts from your wallet">
+                + Wallet
+              </button>
+              <button className="rounded-full px-3 py-1.5" style={{ border: "1px solid var(--border)", color: "var(--text-secondary)" }}
+                onClick={() => disconnect.mutate({})}>
+                Disconnect
+              </button>
+            </div>
           )}
         </div>
       </header>
@@ -566,15 +585,9 @@ export default function AuctionPage() {
                 <div>
                   <div className="font-medium">Unit #{id.toString()}</div>
                   <div className="text-sm" style={{ ...muted, fontVariantNumeric: "tabular-nums" }}>
-                    Paid {yen(toYen(paid))}.{saleOpen ? ` Sell back any time for ${yen(toYen(payout(paid)))} — what you paid, less ${Number(spreadBps) / 100}%.` : ""}
+                    Paid {yen(toYen(paid))}. Redeem it with the maker for the physical item.
                   </div>
                 </div>
-                {saleOpen && (
-                  <button className={secondaryBtn} disabled={!!busy || wrongChain} style={{ border: "1px solid var(--border)" }}
-                    onClick={() => void sellBack(id, paid)}>
-                    Sell back for {yen(toYen(payout(paid)))}
-                  </button>
-                )}
               </li>
             ))}
           </ul>
@@ -601,9 +614,9 @@ export default function AuctionPage() {
               </button>
             )}
             {phase === "Settled" && (
-              <button className={secondaryBtn} style={{ border: "1px solid var(--border)" }} disabled={!!busy || withdrawable === 0n}
+              <button className={secondaryBtn} style={{ border: "1px solid var(--border)" }} disabled={!!busy || makerFunds === 0n}
                 onClick={() => makerCall("withdraw", "Withdrawing…")}>
-                Withdraw {yen(toYen(withdrawable))}{saleOpen ? " (the sell-back reserve stays)" : ""}
+                Withdraw {yen(toYen(makerFunds))}
               </button>
             )}
           </div>

@@ -213,8 +213,8 @@ Scalping exists because of a gap: 定価 sits below the market price, and the sc
 difference. The Phase 1 curve captures that gap for the maker by *guessing* the market price with a
 slope the maker picks. A sealed-bid auction captures it by *measuring* the market price directly —
 same thesis, better instrument. The story becomes: fan units at 定価 (the culture) → the rest priced
-by sealed bids (the gap goes to the maker) → sell-back at the clearing price (resale has no edge) →
-one per human throughout.
+by sealed bids (the gap goes to the maker) → resale has no edge, because winners already paid the
+market price → one per human throughout.
 
 ### 8.2 Mechanism
 
@@ -235,16 +235,17 @@ One sealed-bid round for a drop of N units, of which X are fan units.
    - Raffle-first is deliberate: the bid doesn't affect raffle odds, so bidding your true value stays
      optimal. Raffling among auction losers instead would reward bidding low on purpose.
    - Unrevealed bids forfeit their deposit.
-5. **Withdraw.** Pull-based: losers get their deposit back, winners get deposit minus price.
-6. **Sell-back.** After settlement, a holder can return a unit for **the price that unit sold for**
-   minus the spread (default 5%): the clearing price for auction units, 定価 for fan units. The
-   contract keeps enough to buy back every unit until the sale closes — the same solvency rule as
-   Phase 1 (§6.4). A seller can never bid again (there is only one round).
-   - Why not the clearing price for fan units too (the original wording): a fan unit brought in only
-     定価, so paying it back at the clearing price comes out of the maker's pocket, and with many fan
-     units the contract can't cover every sell-back. Changed 2026-09-26 while building.
+5. **Claim and withdraw.** Pull-based: losers get their deposit back, winners get their unit plus
+   deposit minus price. The maker withdraws everything the sale raised as soon as it settles.
+6. **No sell-back** (removed 2026-09-26, the builder's call after testing). In the curve drop,
+   sell-back is how the drop outcompetes resale: a returned unit goes back on sale cheaper. In the
+   auction it has nothing to do: winners paid the market price, so there is no resale edge, and in
+   a single round a returned unit is just burned. It only locked the maker's proceeds until the
+   sale closed. The only units worth flipping are fan units, bought at 定価 — a deliberate gift to
+   fans, and one a 95%-of-定価 buy-back wouldn't compete with anyway. Hosted resale on the pool
+   (§8.6) is the successor. `Drop.sol` keeps its sell-back.
 
-Knobs: N, X, 定価 (reserve), spread, optional price cap (if demand at the cap exceeds the remaining
+Knobs: N, X, 定価 (reserve), optional price cap (if demand at the cap exceeds the remaining
 units, those at the cap are raffled).
 
 ### 8.3 Why World ID is central here
@@ -278,7 +279,8 @@ honest.**
 - Tests required before it counts as working: uniform price = highest losing bid; fewer bids than
   units → everyone pays 定価; raffle only among bids ≥ 定価 and doesn't change auction outcomes;
   one bid per nullifier; unrevealed deposits forfeit; admin can't settle before the minimum reveal
-  time; ordinary swaps blocked; refunds exact; sell-back solvency holds.
+  time; ordinary swaps blocked; refunds exact; every wei accounted for (bidders' refunds + the
+  maker's proceeds = all deposits).
 - Demo with multiple bidders: pending World's answer on multiple simulator identities (asked
   2026-09-26 morning); fallback is test mode for the extra bidders.
 
@@ -302,8 +304,7 @@ For the demo, deploy with a small `flatUnits` (e.g. 2–3) so the curve kicks in
 3. Same judge tries to bid again → **rejected** (World's required alternative path).
 4. Admin closes bidding → judges reveal → settle: fan units raffled at 定価, the rest clear at one
    price — the highest losing bid — shown on screen.
-5. A winner sells back at the clearing price minus the spread.
-6. Close: the gap scalpers used to take is on screen, and it goes to the maker.
+5. Close: the gap scalpers used to take is on screen, and the maker withdraws it.
 
 Fallback if the auction isn't ready: the Phase 1 curve demo (fan price → demand pricing → rejection
 → sell-back), which is live and tested.

@@ -1,9 +1,9 @@
 // Generated from out/AuctionDrop.sol and deployments/sepolia-auction.json. Do not edit by hand.
 // Regenerate after a redeploy: `npm run gen:drop` in web/.
 
-export const AUCTION_ADDRESS = "0xec6239640c6531F97bD2a7d84115c6094a4B2888" as const;
+export const AUCTION_ADDRESS = "0x0b7C565B45A8009B97991F08c49b20CE371Fa888" as const;
 export const AUCTION_ID = "0xae45b150fa5f1c0b052ea3a0783ac27b3059da609942cac8b9e95a9d81762dfc" as const;
-export const AUCTION_DEPLOY_BLOCK = 11781947n;
+export const AUCTION_DEPLOY_BLOCK = 11782556n;
 export const UNIVERSAL_ROUTER = "0x3A9D48AB9751398BbFa63ad67599Bb04e4BdF98b" as const;
 export const POOL_FEE = 0;
 export const TICK_SPACING = 1;
@@ -53,17 +53,7 @@ export const auctionAbi = [
             "internalType": "uint256"
           },
           {
-            "name": "spreadBps",
-            "type": "uint256",
-            "internalType": "uint256"
-          },
-          {
             "name": "minRevealTime",
-            "type": "uint256",
-            "internalType": "uint256"
-          },
-          {
-            "name": "saleEnd",
             "type": "uint256",
             "internalType": "uint256"
           }
@@ -1307,19 +1297,6 @@ export const auctionAbi = [
   },
   {
     "type": "function",
-    "name": "liability",
-    "inputs": [],
-    "outputs": [
-      {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
     "name": "maker",
     "inputs": [],
     "outputs": [
@@ -1563,32 +1540,6 @@ export const auctionAbi = [
   },
   {
     "type": "function",
-    "name": "saleEnd",
-    "inputs": [],
-    "outputs": [
-      {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "sellBack",
-    "inputs": [
-      {
-        "name": "tokenId",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
-    "outputs": [],
-    "stateMutability": "nonpayable"
-  },
-  {
-    "type": "function",
     "name": "setApprovalForAll",
     "inputs": [
       {
@@ -1611,19 +1562,6 @@ export const auctionAbi = [
     "inputs": [],
     "outputs": [],
     "stateMutability": "nonpayable"
-  },
-  {
-    "type": "function",
-    "name": "spreadBps",
-    "inputs": [],
-    "outputs": [
-      {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
-    "stateMutability": "view"
   },
   {
     "type": "function",
@@ -1750,19 +1688,6 @@ export const auctionAbi = [
     "inputs": [],
     "outputs": [],
     "stateMutability": "nonpayable"
-  },
-  {
-    "type": "function",
-    "name": "withdrawable",
-    "inputs": [],
-    "outputs": [
-      {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
-    "stateMutability": "view"
   },
   {
     "type": "event",
@@ -2065,31 +1990,6 @@ export const auctionAbi = [
   },
   {
     "type": "event",
-    "name": "SoldBack",
-    "inputs": [
-      {
-        "name": "seller",
-        "type": "address",
-        "indexed": true,
-        "internalType": "address"
-      },
-      {
-        "name": "tokenId",
-        "type": "uint256",
-        "indexed": true,
-        "internalType": "uint256"
-      },
-      {
-        "name": "payout",
-        "type": "uint256",
-        "indexed": false,
-        "internalType": "uint256"
-      }
-    ],
-    "anonymous": false
-  },
-  {
-    "type": "event",
     "name": "Transfer",
     "inputs": [
       {
@@ -2318,11 +2218,6 @@ export const auctionAbi = [
   },
   {
     "type": "error",
-    "name": "NotOwner",
-    "inputs": []
-  },
-  {
-    "type": "error",
     "name": "NotPoolManager",
     "inputs": []
   },
@@ -2361,11 +2256,6 @@ export const auctionAbi = [
         "internalType": "address"
       }
     ]
-  },
-  {
-    "type": "error",
-    "name": "SaleClosed",
-    "inputs": []
   },
   {
     "type": "error",
