@@ -33,11 +33,10 @@ Deployed over a public Sepolia endpoint rather than Infura, because the Infura k
 available and deploying once does not need a dedicated endpoint. The frontend should move to a
 dedicated RPC before judging, since public endpoints rate-limit under load.
 
-Source is verified on Sourcify with an exact creation and runtime bytecode match. Etherscan
-verification was not done at deploy time: there is no Etherscan API key in `.env` yet, and
-Sourcify's relayed Etherscan submission hit its shared daily rate limit. Routescan picked it up.
-Worth revisiting with an own API key before submission, since judges clicking through to
-verified source on Etherscan is free credibility.
+Source is verified on Sourcify with an exact creation and runtime bytecode match, and on
+Etherscan (`Pass - Verified`). Etherscan verification was a second step rather than part of the
+deploy: `ETHERSCAN_API_KEY` was still empty when the contract went out, so `--verify` was skipped
+and run separately once the key was in place.
 
 `saleEnd` is 2026-09-28T12:39:36Z — deliberately after the Sunday 09:00 JST submission deadline,
 so the sale is still open while judges buy. The consequence is that `redeem()` and the
