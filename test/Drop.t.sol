@@ -404,6 +404,86 @@ contract DropTest is Test {
         drop.redeem(tokenId);
     }
 
+    // --- cascades (SPEC §6.4) ---
+
+    /// Reproduces the worked-example table: 80 sold, then chains of sell-backs.
+    function test_Cascade_MatchesSpecWorkedExample() public {
+        for (uint256 i; i < 80; ++i) {
+            _buy();
+        }
+        assertEq(drop.curveSum(), 514_500, "80 sold -> curve revenue");
+        assertGe(_makerCash(), 514_500);
+        _assertInvariants();
+
+        // (sell-backs so far, units still sold, curve revenue of units still sold, maker cash floor)
+        uint256[4][4] memory rows = [
+            [uint256(10), 70, 401_250, 406_912],
+            [uint256(30), 50, 219_750, 234_488],
+            [uint256(60), 20, 60_000, 82_725],
+            [uint256(80), 0, 0, 25_725]
+        ];
+
+        uint256 done;
+        for (uint256 r; r < rows.length; ++r) {
+            while (done < rows[r][0]) {
+                _sellBackAt(holders.length - 1);
+                _assertInvariants();
+                done++;
+            }
+            assertEq(drop.sold(), rows[r][1], "units still sold");
+            assertEq(drop.curveSum(), rows[r][2], "curve revenue of units still sold");
+            // At least the table figure: per-payout flooring keeps a few wei extra in the drop.
+            assertGe(_makerCash(), rows[r][3], "maker cash");
+        }
+
+        // Everyone left: the maker keeps spread income only, and it is never negative.
+        assertEq(drop.sold(), 0);
+        assertGt(_makerCash(), 0, "maker keeps the spread");
+    }
+
+    function test_Cascade_EveryoneSellsBackAndAllGetPaid() public {
+        for (uint256 i; i < 80; ++i) {
+            _buy();
+        }
+        while (holders.length > 0) {
+            address holder = holders[holders.length - 1];
+            uint256 before = holder.balance;
+            uint256 expected = drop.currentSellBackPrice();
+            _sellBackAt(holders.length - 1);
+            assertEq(holder.balance - before, expected, "seller was paid in full");
+            _assertInvariants();
+        }
+        assertEq(drop.sold(), 0);
+        assertEq(drop.curveSum(), 0);
+        assertEq(drop.liability(), 0);
+    }
+
+    // --- fuzz ---
+
+    /// Random interleaving of buys, sell-backs and withdrawals; both invariants hold at every step.
+    function testFuzz_RandomChurnKeepsInvariants(uint256 seed) public {
+        for (uint256 step; step < 60; ++step) {
+            seed = uint256(keccak256(abi.encode(seed, step)));
+            uint256 action = seed % 10;
+
+            if (action < 6 && drop.sold() < SUPPLY) {
+                _buy();
+            } else if (action < 9 && holders.length > 0) {
+                _sellBackAt(seed % holders.length);
+            } else if (drop.withdrawable() > 0) {
+                vm.prank(maker);
+                drop.withdraw();
+            }
+            _assertInvariants();
+        }
+
+        // Whatever happened, every remaining holder can still be paid out in full.
+        while (holders.length > 0) {
+            _sellBackAt(holders.length - 1);
+            _assertInvariants();
+        }
+    }
+
     // --- config ---
 
     function test_ConstructorRejectsBadConfig() public {
