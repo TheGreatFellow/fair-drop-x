@@ -29,17 +29,30 @@ Each phase must be fully working, committed and demo-able before starting the ne
 | Phase | Scope | Prize target | Target done by |
 |---|---|---|---|
 | **1. Core + World** | Contract (flat price → curve, buy, sell-back, withdraw), World ID verification backend, drop page | World — Best Use of IDKit ($7,500) | Sat afternoon |
-| **2. ENS** | Each unit is also an ENSv2 subname | ENS — Best Use of ENSv2 ($6,000, 3 places) | Sat night |
-| **3. Uniswap (if time permits)** | Pay with any token via Uniswap | Uniswap — Best Stack Contribution ($6,000, 3 places) | Sun early morning, or skip |
+| **2. Uniswap (only if Phase 1 is fully done)** | Pay with any token via the Uniswap Trading API | Uniswap — Best Stack Contribution ($6,000, 3 places) | Sun early morning, or skip |
 
-If Phase 2 isn't working by Saturday night, stop, polish Phase 1 and submit. A polished Phase 1 beats a broken Phase 2.
+**Phase 1 is the submission.** Phase 2 is started only once the contract, the World ID backend
+and the frontend all work end to end, and only if that happens with hours to spare. A polished
+Phase 1 beats a broken Phase 2 — one finished integration beats two half-built ones.
 
 ## 5. Explicitly out of scope (decided, do not build)
 
 - Demand-triggered production runs (items are fixed limited editions).
 - Same-human-only redemption, transfer locks, claim restrictions.
 - Uniform clearing-price auction.
-- Uniswap v4 custom-curve hook (too risky solo; Phase 3 uses the simpler integration).
+- Uniswap v4 custom-curve hook (too risky solo; Phase 2 uses the simpler Trading API integration).
+- **ENSv2 subnames (descoped 2026-09-25).** Giving each unit a subname like `042.drop.maker.eth`
+  is decoration: the NFT stays the source of truth and nothing reads the name, which fails ENS's
+  "central, not cosmetic" bar. The one genuinely non-cosmetic angle is that this drop's units
+  churn — sell-back burns a unit, so names must be revoked and edition numbers retired, which is
+  real Permissioned Registry lifecycle work most projects never exercise. Not worth the risk of a
+  Sepolia beta API against a $6,000 prize split three ways while Phase 1 is unfinished. The
+  `_afterMint` / `_beforeBurn` hooks are already deployed, so this stays cheap to revisit.
+- **Sealed-bid / Vickrey auction.** Suggested at the Uniswap booth as a deeper integration. It
+  would replace the mechanism, not extend it: an auction makes fans pay their full willingness to
+  pay, which is the scalper outcome this project exists to prevent, and it discards the fixed fan
+  price that distinguishes us from Unisocks. Sealed bids also can't live in an AMM — swaps are
+  public and atomic — so it would need a v4 hook, already ruled out above.
 
 ---
 
@@ -47,7 +60,8 @@ If Phase 2 isn't working by Saturday night, stop, polish Phase 1 and submit. A p
 
 ### 6.1 Smart contract
 
-Foundry project, Solidity. Target chain: **Sepolia** (ENSv2 beta is on Sepolia, so Phase 2 fits without a chain change). Payment in **native ETH** for Phase 1 (no approve step).
+Foundry project, Solidity. Target chain: **Sepolia** (the Uniswap Trading API supports chain ID
+11155111, so Phase 2 needs no chain change). Payment in **native ETH** for Phase 1 (no approve step).
 
 #### Config (set at deploy / drop creation)
 - `maker` — receives proceeds
@@ -88,7 +102,9 @@ Expose view functions for current buy price, current sell-back price, units left
   - after `saleEnd`: everything
 - `redeem(uint256 tokenId)` — optional, after `saleEnd`: burn + emit `Redeemed(tokenId, owner)` for physical fulfilment
 
-Design the minting so Phase 2 can hook in without a rewrite (e.g. an internal `_afterMint(tokenId, buyer)` / `_beforeBurn(tokenId)` that Phase 2 overrides or extends).
+Minting goes through internal `_afterMint(tokenId, buyer)` / `_beforeBurn(tokenId)` hooks so any
+later integration attaches without touching `buy` / `sellBack`. These are deployed and empty;
+they cost nothing and keep the descoped ENS option open.
 
 #### Invariants (must have tests, incl. fuzz)
 - **Solvency:** after any sequence of buys, sell-backs, and withdrawals, `balance >= liability`. Every sell-back is always payable.
@@ -172,23 +188,37 @@ The maker's cash never goes negative, and each unit still sold is worth at least
 
 ---
 
-## 7. Phase 2 — ENS integration
+## 7. ENS — descoped
 
-Each unit is also an ENSv2 subname on Sepolia, e.g. `042.drop.maker.eth`.
-- Buy → mint subname to the buyer (via the drop's own subname registry under the maker's name).
-- Sell-back → contract revokes the subname.
-- Expiry set to the redemption deadline.
-- Transferable (consistent with rule: transfers not restricted).
-- Optional: text records on each subname (item, edition number, price paid).
+Dropped on 2026-09-25, before any ENS code was written. Reasoning is in §5. In short: a subname
+per unit is a label on a token that already works, and ENS asks for ENSv2 features to be central
+rather than cosmetic. The deployed `_afterMint` / `_beforeBurn` hooks keep it reopenable at no
+cost, and if it is ever revisited the angle worth building is name revocation on sell-back with
+expiry tied to the redemption deadline — lifecycle work, not naming.
 
-ENS requirements: ENSv2 features must be central, not cosmetic; functional demo with no hard-coded values; live demo link and open-source code in the submission.
-Check the ENSv2 docs (Permissioned Registry, Permissioned Resolver, Enhanced Access Control) — it's a new beta; don't rely on memory. Attend ENS workshop (Fri 15:00, 5F) if possible.
-
-## 8. Phase 3 — Uniswap integration (only if time permits)
+## 8. Phase 2 — Uniswap integration (only if Phase 1 is fully done, with hours to spare)
 
 **Pay with any token:** buyers holding another token get it swapped to the drop's payment currency via the Uniswap Trading API, then `buy()` runs.
 Requirements: public repo, **`FEEDBACK.md`**, completed Uniswap Developer Feedback Form linking to it, README pointing to the exact contracts/lines of the integration.
-Uniswap workshop: Fri 16:30, 5F. Ask whether this counts as a meaningful integration.
+
+### What was checked at the event (2026-09-25)
+
+- **Sepolia is supported.** Chain ID 11155111 is listed, and the docs say all listed testnets are
+  reachable through the API. The warning in `REFERENCES.md` that it might not support Sepolia is
+  wrong.
+- **The API key is free and self-serve**, rate-limited to 6 requests/second. No approval queue.
+- **Liquidity is the open risk, not access.** No Uniswap v3 pool exists on Sepolia for WETH/USDC
+  or WETH/UNI at any fee tier. The Trading API also routes v2, v4 and UniswapX, which was not
+  checked. Before building anything: get a key and request one quote. If no route comes back, the
+  integration demos as a failing swap, which is worse than not integrating at all.
+- **The Uniswap team's own read is that this is shallow** — similar to any bonding-curve project.
+  Accepted. It is a convenience feature, not a prize strategy. Ask how much of "Best Stack
+  Contribution" is scored on `FEEDBACK.md` and the feedback form versus integration depth; if
+  feedback carries real weight, a thin integration plus honest feedback may still place.
+- **Anything deeper conflicts with the solvency invariant.** The reserve backs the buy-back
+  liability (§6.4); routing it through an AMM adds price risk and breaks the guarantee that is
+  this project's strongest technical asset. Uniswap therefore belongs only at the payment edges:
+  swap in before `buy()`, swap out after `sellBack()`.
 
 ---
 
@@ -200,8 +230,7 @@ For the demo, deploy with a small `flatUnits` (e.g. 2–3) so the curve kicks in
 3. Fan-price units run out → badge switches to "Demand pricing"; next judge buys and the price ticks up on the chart.
 4. First judge tries to buy again → **rejected** (World's required alternative path).
 5. Someone sells back → price drops, payout shown vs. Mercari fee.
-6. (Phase 2) Show the buyer's `042.drop.maker.eth` name; show it revoked after sell-back.
-7. Close: curve vs. Mercari line — the gap is the money that now goes to the maker.
+6. Close: curve vs. Mercari line — the gap is the money that now goes to the maker.
 
 ## 10. ETHGlobal rules to respect
 - Start from scratch (Classic track). No prior project code.
@@ -217,6 +246,6 @@ For the demo, deploy with a small `flatUnits` (e.g. 2–3) so the curve kicks in
 
 ## 12. Build order
 1. **Phase 1:** contract + tests (flat price → curve, buy with voucher, sell-back, withdraw, solvency + maker-never-loses fuzz, cascade tests) → deploy to Sepolia → IDKit backend + voucher → frontend → World debrief. Commit.
-2. **Phase 2:** ENSv2 subnames on buy / revoke on sell-back → update demo. Commit.
-3. **Phase 3 (if time):** Uniswap pay-with-any-token + FEEDBACK.md. Commit.
+2. **Phase 2 (only if Phase 1 is fully working with hours to spare):** check Sepolia liquidity
+   with one Trading API quote, then Uniswap pay-with-any-token + FEEDBACK.md. Commit.
 4. Final: README, demo video, AI attribution, submit with buffer before 09:00 JST Sunday.

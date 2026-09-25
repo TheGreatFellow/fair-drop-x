@@ -3,9 +3,10 @@
 Hackathon project for ETHGlobal Tokyo 2026. Full context and all product decisions: @SPEC.md
 
 ## Phases (SPEC §4)
-1. Core + World ID — build this first, fully working.
-2. ENSv2 subnames — only after Phase 1 is working and committed.
-3. Uniswap pay-with-any-token — only if time permits.
+1. Core + World ID — build this first, fully working. **This is the submission.**
+2. Uniswap pay-with-any-token — only if Phase 1 works end-to-end with hours to spare.
+
+ENSv2 subnames were descoped on 2026-09-25 (reasoning in SPEC §5). Do not start ENS work.
 Never start a phase before the previous one works end-to-end. Tell me if we're behind schedule.
 
 ## How to work
