@@ -34,7 +34,7 @@ Measured from git history and the chain, not recalled:
 
 About **1h45m from the first line of World ID code to a verified onchain purchase**, and four
 minutes from the page existing to the first success. Roughly half of that time went to the friction
-below — mostly items 1–5, which are documentation gaps rather than code.
+below — mostly items 1–5, which are documentation gaps rather than code. (Item 12 came later: an overnight Portal change that broke staging after this first success.)
 
 ## Friction, in the order we hit it
 
@@ -86,6 +86,28 @@ below — mostly items 1–5, which are documentation gaps rather than code.
     simulator's source. Missing capability: a way to pick among several v4 test identities.
     The tempting workaround — enabling legacy v3 proofs to get switchable identities — would open a
     real hole: one person could then buy once with a v3 proof and once with a v4 one.
+
+12. **Staging broke mid-hackathon, with no notice.** Our staging integration worked end to end on
+    Sat 00:43. By Sat ~08:00 the same code got `403 environment_not_allowed`: "Staging verification
+    is not open for this app. Open a staging window with the set_world_id_staging_verification
+    tool…". A Developer Portal change merged on Sep 25 now requires two things for any staging
+    proof:
+    - the app's team opens a 24-hour staging window through the Portal **MCP** tool
+      `set_world_id_staging_verification`, authenticated with a team API key;
+    - every verify call sends the token that window issued as an `x-staging-verification-token`
+      header.
+
+    There is no Portal UI for it yet, and we found no changelog or docs page announcing it. We
+    learned the header name and the token lifetime by reading the Portal's source. The window closes
+    itself after 24 hours, and reopening it replaces the token, so a demo that spans more than a day
+    has to reopen the window and redeploy the new token beforehand.
+
+    To be fair to World: the change is right. It closes exactly the hole in item 7 on World's side:
+    before it, a production RP accepted freely mintable simulator identities from anyone who sent
+    `environment: "staging"`. The error message is also good, because it names the tool to use. The
+    friction is that a breaking change landed silently during an event full of staging integrations,
+    and the fix is reachable only through MCP. Took about 30 minutes: find the source, add the
+    header, script the window (`web/scripts/open-staging-window.mjs`).
 
 ## Confirmed by testing
 
