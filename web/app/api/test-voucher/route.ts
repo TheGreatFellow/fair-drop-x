@@ -1,5 +1,5 @@
 import { getAddress, isAddress } from "viem";
-import { signVoucher } from "@/lib/voucher";
+import { parseTarget, signVoucher } from "@/lib/voucher";
 
 /**
  * Test-only: a voucher WITHOUT World ID, under a random nullifier, so one wallet can buy many units
@@ -23,7 +23,7 @@ export async function POST(request: Request) {
   const nullifier = BigInt(
     "0x" + Array.from(crypto.getRandomValues(new Uint8Array(32)), (b) => b.toString(16).padStart(2, "0")).join(""),
   );
-  const { voucher, signature } = await signVoucher(getAddress(body.buyer), nullifier);
+  const { voucher, signature } = await signVoucher(getAddress(body.buyer), nullifier, parseTarget(body.drop));
   return Response.json({
     voucher: { ...voucher, nullifierHash: voucher.nullifierHash.toString(), deadline: voucher.deadline.toString() },
     signature,

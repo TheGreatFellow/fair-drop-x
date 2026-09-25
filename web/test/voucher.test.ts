@@ -15,7 +15,8 @@ import {
 import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
 import { sepolia } from "viem/chains";
 import { DROP_ADDRESS, DROP_VERIFIER, dropAbi } from "../lib/drop";
-import { isNullifierUsed, signVoucher, voucherDomain, voucherTypes } from "../lib/voucher";
+import { AUCTION_ADDRESS, auctionAbi } from "../lib/auction";
+import { domainFor, isNullifierUsed, signVoucher, voucherDomain, voucherTypes } from "../lib/voucher";
 
 const BUYER = "0xF0E135c4c36Ba36429E00a3680E64fA440Ec65fD";
 const live = createPublicClient({ chain: sepolia, transport: http(process.env.SEPOLIA_RPC_URL) });
@@ -35,6 +36,16 @@ test("voucher digest matches the deployed contract's hashVoucher, signed by its 
     signature,
   });
   assert.equal(signer.toLowerCase(), DROP_VERIFIER.toLowerCase());
+});
+
+test("auction vouchers match the deployed AuctionDrop's hashVoucher and carry its dropId", async () => {
+  const { voucher } = await signVoucher(BUYER, randomNullifier(), "auction");
+  const local = hashTypedData({ domain: domainFor("auction"), types: voucherTypes, primaryType: "Voucher", message: voucher });
+  const onchain = await live.readContract({ address: AUCTION_ADDRESS, abi: auctionAbi, functionName: "hashVoucher", args: [voucher] });
+  assert.equal(local, onchain, "EIP-712 domain or types drifted from AuctionDrop.sol");
+  const dropId = await live.readContract({ address: AUCTION_ADDRESS, abi: auctionAbi, functionName: "dropId" });
+  assert.equal(voucher.dropId, dropId);
+  assert.equal(await isNullifierUsed(randomNullifier(), "auction"), false);
 });
 
 test("an unused nullifier reads as unused on the live drop", async () => {
