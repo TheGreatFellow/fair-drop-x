@@ -5,7 +5,7 @@ and the markup goes to the maker, not to scalpers.**
 
 ETHGlobal Tokyo 2026 · built solo · Sepolia · World ID 4.0
 
-- **Live demo:** _link added after deploy_
+- **Live demo:** [fair-drop-sable.vercel.app](https://fair-drop-sable.vercel.app) — World ID in staging: verify with the [simulator](https://simulator.worldcoin.org)
 - **Contract:** [`0x897d36a3…eb9d3` on Sepolia](https://sepolia.etherscan.io/address/0x897d36a3d028776c3cdfc2e5a468544fdd1eb9d3#code) (verified)
 - **World ID integration debrief:** [`docs/world-debrief.md`](docs/world-debrief.md)
 
