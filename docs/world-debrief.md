@@ -23,7 +23,8 @@ be substituted.
 ## Time to first success
 
 - First correctly signed RP request accepted by World's v4 endpoint: _pending the first real proof._
-- First real proof verified end to end: _pending (staging simulator)._
+- First real proof verified end to end (staging simulator → World v4 verify → EIP-712 voucher →
+  onchain `buy()`): achieved 2026-09-26. _Elapsed time: to be filled in by the builder._
 
 ## Friction, in the order we hit it
 
@@ -58,6 +59,21 @@ be substituted.
 9. **A bad `rp_id` returns `app_not_migrated`.** Misleading — it reads like a Portal setting to
    change rather than a typo — and the endpoint validates the body before the RP, so the ID can't
    be sanity-checked without a well-formed proof.
+
+10. **The widget replaces the host's rejection with a generic one.** When `handleVerify` throws —
+    here, because the person already bought — IDKit shows "Verification declined: Failed to verify
+    your credential proof. Please contact the website owner." That tells an honest user their
+    proof is broken, when the truth is "you already bought one". There is no way to pass a message
+    through; we close the widget ourselves and show our own.
+
+## Confirmed by testing
+
+- **Nullifiers are deterministic per person and action.** One simulator identity verified five
+  times and produced the same nullifier every time. This settles friction item 4 in practice —
+  but it is still worth stating in the docs.
+- **`max_verifications: 1` was not enforced on staging.** The same person verified five times with
+  World returning success each time. Our contract's `nullifierUsed` check refused every repeat
+  purchase, which is why uniqueness is enforced onchain rather than delegated to the Portal setting.
 
 ## The single most impactful improvement
 

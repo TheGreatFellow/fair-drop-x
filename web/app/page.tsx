@@ -181,7 +181,9 @@ export default function DropPage() {
     }
   }
 
-  // Runs inside the widget: throwing makes the widget show the failure too.
+  // Runs inside the widget. On a refusal, close the widget ourselves: left open, it replaces our
+  // specific message ("Already purchased — one per person") with a generic "contact the website
+  // owner", and that refusal is the demo's key moment.
   async function handleVerify(result: IDKitResult) {
     const res = await fetch("/api/verify", {
       method: "POST",
@@ -191,6 +193,7 @@ export default function DropPage() {
     const body = await res.json();
     if (!res.ok) {
       setNotice({ tone: "bad", text: REJECTIONS[body.code] ?? `Verification failed: ${body.message}` });
+      setWidgetOpen(false);
       throw new Error(body.code);
     }
     signedRef.current = body;
@@ -319,9 +322,12 @@ export default function DropPage() {
 
           <div className="mt-6">{action}</div>
           {notice && (
-            <p role="status" className="mt-3 text-sm"
-              style={{ color: notice.tone === "bad" ? "var(--bad)" : notice.tone === "good" ? "var(--good)" : "var(--text-secondary)" }}>
-              {notice.text}
+            <p role="status" className="mt-4 rounded-xl px-4 py-3 text-sm font-medium"
+              style={{
+                color: notice.tone === "bad" ? "var(--bad)" : notice.tone === "good" ? "var(--good)" : "var(--text-secondary)",
+                background: `color-mix(in srgb, ${notice.tone === "bad" ? "var(--bad)" : notice.tone === "good" ? "var(--good)" : "var(--muted)"} 12%, transparent)`,
+              }}>
+              {notice.tone === "bad" ? "✕ " : notice.tone === "good" ? "✓ " : ""}{notice.text}
             </p>
           )}
         </section>

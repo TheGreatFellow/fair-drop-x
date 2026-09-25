@@ -41,8 +41,11 @@ is rejected as `all_verifications_failed`.
 One harness finding: anvil's default key is public, and on Sepolia it carries an EIP-7702
 delegation, so on a fork `_safeMint` calls a delegate that reverts. Tests use a fresh key.
 
-## Open, needs the staging simulator
+## Tested with the staging simulator (2026-09-26)
 
-- First real proof end to end.
-- Whether one identity verifying twice yields the same nullifier. Until confirmed, `max_verifications`
-  stays at 1 in the Portal as a safety net.
+- First real proof end to end: verify → voucher → onchain buy, working.
+- Same identity verified five more times: identical nullifier each time, and every repeat purchase
+  refused as `already_purchased`. World did not enforce `max_verifications: 1` on staging.
+- Two UI bugs found and fixed: a reused widget replayed a consumed request ("Verification
+  unavailable" for everyone after the first purchase), and the widget's generic "contact the website
+  owner" screen hid our "Already purchased" message.
