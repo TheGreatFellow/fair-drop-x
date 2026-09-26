@@ -288,6 +288,14 @@ honest.**
 
 - **World ID validation hook for Uniswap's CCA** — CCA's official `IValidationHook` slot gating bids
   to one per human.
+  **TODO (candidate for this hackathon, on hold 2026-09-26 until World clarifies the staging
+  setup):** an add-on, not a rewrite. CCA is public, continuous and fungible, so the sealed drop
+  can't move over, but the World ID gate can. `validate(maxPrice, amount, owner, sender, hookData)`
+  checks our voucher in hookData, allows one bid per nullifier, and caps each bid at one unit's worth
+  (unit demand, §8.3). CCA passes `owner`, so no `tx.origin`. The CCA factory v2.1.0 is on Sepolia at
+  `0x000000001F26a0044BaA66024e7b6599c61963F8`. Scope, about 2h: the hook, fork tests against the real
+  CCA, a live Sepolia instance, the backend voucher target, a README section; no frontend. Build it
+  after the merge and README.
 - **Resale on Uniswap after settlement** — the hook opens the pool as the resale market at the
   clearing price, with hook fees paying the maker on every resale: "we don't ban resale, we host it."
 - Route A (Trading API pay-with-any-token) as a standalone feature, if the Universal Router path
