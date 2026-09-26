@@ -6,3 +6,7 @@ node_modules/
 .DS_Store
 refs/
 REFERENCES.md
+
+# Personal notes, kept out of the repo
+FEEDBACK.md
+CODE-EXPLAINED.md
