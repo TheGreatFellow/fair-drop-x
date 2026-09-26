@@ -67,7 +67,7 @@ test("voucher buys on a fork of the deployed drop — and the same human can't b
       await fork.getChainId();
       break;
     } catch {
-      if (i > 50) throw new Error("anvil did not start");
+      if (i > 150) throw new Error("anvil did not start"); // 30s: forks start slowly on a public RPC
       await new Promise((r) => setTimeout(r, 200));
     }
   }

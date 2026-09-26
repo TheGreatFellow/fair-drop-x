@@ -27,6 +27,9 @@ test("browser commitment matches AuctionDrop.commitmentOf", async () => {
 
 // The web app's exact bid transaction, sent to Sepolia's Universal Router on a local fork.
 test("a bid from the web app lands in the auction on a Sepolia fork", async (t) => {
+  // Forks the live auction, so it only means something while that auction is taking bids.
+  const phase = await live.readContract({ address: AUCTION_ADDRESS, abi: auctionAbi, functionName: "phase" });
+  if (phase !== 0) return t.skip("the live auction has closed bidding; redeploy a fresh one to run this");
   const port = 8547;
   const anvil = spawn(ANVIL, ["--fork-url", process.env.SEPOLIA_RPC_URL!, "--port", String(port), "--silent"]);
   t.after(() => anvil.kill());
@@ -37,7 +40,7 @@ test("a bid from the web app lands in the auction on a Sepolia fork", async (t) 
       await fork.getChainId();
       break;
     } catch {
-      if (i > 50) throw new Error("anvil did not start");
+      if (i > 150) throw new Error("anvil did not start"); // 30s: forks start slowly on a public RPC
       await new Promise((r) => setTimeout(r, 200));
     }
   }
